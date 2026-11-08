@@ -9,7 +9,7 @@ namespace patrol {
 
 // 覆盖路径规划（组合策略）：同时计算 Boustrophedon 单元分解与贪心 BFS，
 // 返回两者中较短的一条。保证路径长度 ≤ 贪心策略，且在多数含障碍地图上
-// 更短；无障碍时两者均退化为全局蛇形扫描（N 格恰好 N-1 步，最优）。
+// 更短；无障碍时 Boustrophedon 退化为全局蛇形扫描（N 格恰好 N-1 步，最优）。
 // 返回空向量表示起点不可通行或没有可访问的未覆盖格（如被障碍包围）。
 std::vector<Direction> planPatrolPath(const Grid& grid, Position start);
 

@@ -83,6 +83,23 @@ TEST(PatrolPlannerTest, StartOnObstacleReturnsEmpty) {
     EXPECT_TRUE(planPatrolPath(grid, {0, 0}).empty());
 }
 
+// 不可达孤岛：起点区域与孤岛共存时，只覆盖可达部分，不误判孤岛格。
+TEST(PatrolPlannerTest, CoversOnlyReachableWhenIslandExists) {
+    // (3,3) 被 (2,3)(4,3)(3,2)(3,4) 四障碍包围成孤岛：可通行但不可达。
+    const Grid grid(6, 6, {{2, 3}, {4, 3}, {3, 2}, {3, 4}});
+    const auto all = allWalkable(grid);
+    ASSERT_TRUE(all.count({3, 3})) << "测试前提：孤岛格存在且可通行";
+
+    const std::vector<Direction> path = planPatrolPath(grid, {0, 0});
+    const auto covered = simulate(grid, {0, 0}, path);
+    ASSERT_FALSE(covered.count({3, 3})) << "不可达孤岛不应被覆盖";
+
+    // 除孤岛外，其余可通行格都应被覆盖。
+    auto expected = all;
+    expected.erase({3, 3});
+    EXPECT_EQ(covered, expected);
+}
+
 // 无障碍最优性：Boustrophedon 单元分解版覆盖 N 格恰好 N-1 步。
 TEST(PatrolPlannerTest, BoustrophedonOptimalOnEmptyGrid) {
     const Grid grid(6, 7);

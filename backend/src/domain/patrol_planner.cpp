@@ -334,7 +334,8 @@ std::vector<Direction> planPatrolPathBoustrophedon(const Grid& grid,
     Position current = start;
 
     // 单元覆盖顺序：从起点单元出发做「邻接贪心 DFS」，无未访问邻接时全局
-    // 跳到离 current 最近（曼哈顿）的未访问单元。
+    // 跳到离起点最近（曼哈顿）的未访问单元。排序用曼哈顿距离作启发式，
+    // 实际路径质量由下方覆盖阶段的「入口+出口」一步前瞻保证。
     std::vector<int> order;
     order.reserve(cells.size());
     std::vector<bool> cellVisited(cells.size(), false);
@@ -455,14 +456,37 @@ std::vector<Direction> planPatrolPathBoustrophedon(const Grid& grid,
             if (covered[p.y][p.x] || !reachable[p.y][p.x]) {
                 continue;
             }
-            if (!(p == current)) {
-                const std::vector<Direction> dirs = bfsPath(grid, current, p);
-                for (const Direction dir : dirs) {
-                    const Position d = delta(dir);
-                    path.push_back(dir);
-                    current = Position{current.x + d.x, current.y + d.y};
-                    covered[current.y][current.x] = true;
+            const int dx = p.x - current.x;
+            const int dy = p.y - current.y;
+            const int dist = std::abs(dx) + std::abs(dy);
+            if (dist == 0) {
+                continue;
+            }
+            if (dist == 1) {
+                // 相邻步：直接单步推进，避免为每个相邻格做全图 BFS 分配
+                // （单元内蛇形步曼哈顿距离恒为 1，占覆盖步数的绝大多数）。
+                Direction dir;
+                if (dx == 1) {
+                    dir = Direction::Right;
+                } else if (dx == -1) {
+                    dir = Direction::Left;
+                } else if (dy == 1) {
+                    dir = Direction::Down;
+                } else {
+                    dir = Direction::Up;
                 }
+                path.push_back(dir);
+                current = p;
+                covered[p.y][p.x] = true;
+                continue;
+            }
+            // 跨单元入口：BFS 最短路径衔接。
+            const std::vector<Direction> dirs = bfsPath(grid, current, p);
+            for (const Direction dir : dirs) {
+                const Position d = delta(dir);
+                path.push_back(dir);
+                current = Position{current.x + d.x, current.y + d.y};
+                covered[current.y][current.x] = true;
             }
         }
     }
