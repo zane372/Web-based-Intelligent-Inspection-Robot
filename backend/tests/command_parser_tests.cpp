@@ -19,12 +19,12 @@ TEST(CommandParserTest, ValidResetWithoutDirection) {
     EXPECT_EQ(r.command.type, CommandType::Reset);
 }
 
-// RESET 忽略 direction 字段（direction 是已知字段，不算未知）。
-TEST(CommandParserTest, ResetIgnoresDirection) {
+// RESET 不允许携带 direction（SPEC 4.2.7）：应判为未知字段。
+TEST(CommandParserTest, ResetRejectsDirection) {
     const CommandParseResult r =
         parseCommandBody(R"({"type":"RESET","direction":"LEFT"})");
-    EXPECT_EQ(r.error, ParseError::Ok);
-    EXPECT_EQ(r.command.type, CommandType::Reset);
+    EXPECT_EQ(r.error, ParseError::UnknownField);
+    EXPECT_EQ(r.detail, "direction");
 }
 
 TEST(CommandParserTest, MalformedJson) {
@@ -63,10 +63,14 @@ TEST(CommandParserTest, MoveMissingDirection) {
 }
 
 TEST(CommandParserTest, InvalidDirection) {
-    EXPECT_EQ(parseCommandBody(R"({"type":"MOVE","direction":"NORTH"})").error,
-              ParseError::InvalidDirection);
-    EXPECT_EQ(parseCommandBody(R"({"type":"MOVE","direction":1})").error,
-              ParseError::InvalidDirection);
+    const CommandParseResult a =
+        parseCommandBody(R"({"type":"MOVE","direction":"NORTH"})");
+    EXPECT_EQ(a.error, ParseError::InvalidDirection);
+    EXPECT_EQ(a.detail, "direction");
+    const CommandParseResult b =
+        parseCommandBody(R"({"type":"MOVE","direction":1})");
+    EXPECT_EQ(b.error, ParseError::InvalidDirection);
+    EXPECT_EQ(b.detail, "direction");
 }
 
 }  // namespace

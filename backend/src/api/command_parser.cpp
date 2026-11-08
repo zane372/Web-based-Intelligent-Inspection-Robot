@@ -6,14 +6,6 @@
 
 namespace patrol {
 
-namespace {
-
-bool isKnownField(const std::string& key) {
-    return key == "type" || key == "direction";
-}
-
-}  // namespace
-
 CommandParseResult parseCommandBody(const std::string& body) {
     CommandParseResult result;
 
@@ -40,7 +32,7 @@ CommandParseResult parseCommandBody(const std::string& body) {
     }
     if (!root["type"].is_string()) {
         result.error = ParseError::InvalidCommandType;
-        result.detail = root["type"].dump();
+        result.detail = "type";
         return result;
     }
     const std::string type = root["type"].get<std::string>();
@@ -50,21 +42,24 @@ CommandParseResult parseCommandBody(const std::string& body) {
         result.command.type = CommandType::Reset;
     } else {
         result.error = ParseError::InvalidCommandType;
-        result.detail = type;
+        result.detail = "type";
         return result;
     }
 
-    // 4) 未知字段检查。
+    // 4) 未知字段检查（按命令类型区分：MOVE 允许 type/direction，RESET 仅允许 type）。
+    const bool isMove = result.command.type == CommandType::Move;
     for (auto it = root.begin(); it != root.end(); ++it) {
-        if (!isKnownField(it.key())) {
+        const std::string key = it.key();
+        const bool known = key == "type" || (isMove && key == "direction");
+        if (!known) {
             result.error = ParseError::UnknownField;
-            result.detail = it.key();
+            result.detail = key;
             return result;
         }
     }
 
     // 5) MOVE 需要 direction。
-    if (result.command.type == CommandType::Move) {
+    if (isMove) {
         if (!root.contains("direction")) {
             result.error = ParseError::MissingDirection;
             result.detail = "direction";
@@ -72,13 +67,13 @@ CommandParseResult parseCommandBody(const std::string& body) {
         }
         if (!root["direction"].is_string()) {
             result.error = ParseError::InvalidDirection;
-            result.detail = root["direction"].dump();
+            result.detail = "direction";
             return result;
         }
         Direction direction{};
         if (!directionFromString(root["direction"].get<std::string>(), direction)) {
             result.error = ParseError::InvalidDirection;
-            result.detail = root["direction"].get<std::string>();
+            result.detail = "direction";
             return result;
         }
         result.command.direction = direction;

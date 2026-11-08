@@ -140,7 +140,10 @@ def test_invalid_direction_no_state_change(client, base_url):
     before = client.get(f"{base_url}/api/v1/robot", timeout=2).json()
     resp = _post(client, base_url, {"type": "MOVE", "direction": "DIAGONAL"})
     assert resp.status_code == 400
-    assert resp.json()["error"]["code"] == "INVALID_DIRECTION"
+    error = resp.json()["error"]
+    assert error["code"] == "INVALID_DIRECTION"
+    assert error["details"]["field"] == "direction"
+    assert error["details"]["allowed"] == ["UP", "DOWN", "LEFT", "RIGHT"]
     after = client.get(f"{base_url}/api/v1/robot", timeout=2).json()
     assert after["position"] == before["position"]
     assert after["heading"] == before["heading"]
@@ -169,6 +172,15 @@ def test_unknown_field(client, base_url):
     resp = _post(client, base_url, {"type": "MOVE", "direction": "RIGHT", "speed": 9})
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "UNKNOWN_FIELD"
+
+
+def test_reset_with_direction_rejected(client, base_url):
+    # SPEC 4.2.7：RESET 不允许携带 direction，应判为 UNKNOWN_FIELD。
+    resp = _post(client, base_url, {"type": "RESET", "direction": "LEFT"})
+    assert resp.status_code == 400
+    body = resp.json()["error"]
+    assert body["code"] == "UNKNOWN_FIELD"
+    assert body["details"]["field"] == "direction"
 
 
 def test_malformed_json(client, base_url):

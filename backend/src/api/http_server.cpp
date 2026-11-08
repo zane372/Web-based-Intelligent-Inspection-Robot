@@ -306,6 +306,9 @@ void runHttpServer(const MapConfig& config,
             if (!parsed.detail.empty()) {
                 details["field"] = parsed.detail;
             }
+            if (parsed.error == ParseError::InvalidDirection) {
+                details["allowed"] = {"UP", "DOWN", "LEFT", "RIGHT"};
+            }
             return jsonError(400, mapping.code, mapping.message, requestId, details);
         }
 

@@ -27,7 +27,7 @@ struct ParsedCommand {
 // 命令解析结果：错误码 + 便于定位的错误字段/值 + 解析出的命令。
 struct CommandParseResult {
     ParseError error{ParseError::Ok};
-    std::string detail;  // 非法字段名或值，用于错误响应 details
+    std::string detail;  // 非法字段名，用于错误响应 details
     ParsedCommand command;
 };
 
