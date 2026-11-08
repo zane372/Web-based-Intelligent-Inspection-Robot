@@ -17,34 +17,50 @@ body {
   justify-content: center;
 }
 
-/* 360×800 视口内无横向滚动：容器宽度受限，内容纵向布局。 */
+/* 桌面两栏布局：左侧放大网格地图，右侧竖排控制面板。 */
 #app {
   width: 100%;
-  max-width: 360px;
+  max-width: 1080px;
   min-height: 100vh;
-  padding: 12px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  gap: 14px;
+}
+
+.app-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 h1 {
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 600;
   margin: 0;
 }
 
 .subtitle {
-  margin: -6px 0 0;
+  margin: 0;
   font-size: 13px;
   color: #64748b;
 }
 
-/* 地图容器：宽度限制在视口内，画布按宽度等比缩放。 */
+/* 两栏容器：左地图 + 右控制。 */
+#layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+/* 左侧地图面板：占据主要宽度，画布按宽度等比缩放。 */
+#map-panel {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 #map-container {
   width: 100%;
-  max-width: 340px;
   display: flex;
   justify-content: center;
 }
@@ -52,17 +68,17 @@ h1 {
 #map-canvas {
   width: 100%;
   height: auto;
+  aspect-ratio: 1 / 1;
   display: block;
   border: 1px solid #cbd5e1;
   border-radius: 4px;
   background: #ffffff;
 }
 
-/* 状态栏与读数。 */
+/* 状态栏。 */
 #status {
   margin: 0;
   font-size: 14px;
-  text-align: center;
   min-height: 20px;
 }
 
@@ -79,12 +95,19 @@ h1 {
   color: #b45309;
 }
 
+/* 右侧控制面板：竖排读数 + 方向键 + 巡检 + 帮助。 */
+#side-panel {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 #readout {
   margin: 0;
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   font-size: 13px;
 }
 
@@ -186,7 +209,6 @@ button:not(:disabled):hover {
 
 /* 使用帮助区。 */
 #help {
-  width: 100%;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -208,4 +230,16 @@ button:not(:disabled):hover {
 
 #help li {
   margin: 2px 0;
+}
+
+/* 窄屏（如手机）时回退为单列纵向布局。 */
+@media (max-width: 800px) {
+  #layout {
+    flex-direction: column;
+  }
+
+  #side-panel {
+    flex: 1 1 auto;
+    width: 100%;
+  }
 }
