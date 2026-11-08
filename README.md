@@ -98,7 +98,7 @@ docker compose down
 
 ### 本地开发路径（辅助）
 
-**C++ 后端**（需要 CMake、GCC 12+、libboost-system-dev）：
+**C++ 后端**（需要 CMake、GCC 12+、libboost-system-dev、libasio-dev）：
 
 ```bash
 cmake -S backend -B build -DCMAKE_BUILD_TYPE=Debug
