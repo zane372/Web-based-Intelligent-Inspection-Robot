@@ -114,8 +114,9 @@ private:
 
     RobotSnapshot buildSnapshotLocked() const;
 
-    // 推进一格（调用方需已持有 mutex_）；返回是否仍应继续巡检。
-    bool patrolStepLocked();
+    // 推进一步巡检（含必要时在锁外重规划）。调用方不得持有 mutex_；
+    // 返回是否仍应继续巡检。
+    bool patrolStepReplanned();
 
     // 巡检线程体：按间隔推进，直到被停止或遍历完成。
     void patrolLoop();

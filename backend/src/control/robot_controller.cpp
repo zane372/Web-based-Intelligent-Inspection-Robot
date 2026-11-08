@@ -135,8 +135,7 @@ CommandOutcome RobotController::execute(CommandType type, Direction direction) {
 }
 
 bool RobotController::patrolStep() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return patrolStepLocked();
+    return patrolStepReplanned();
 }
 
 RobotSnapshot RobotController::buildSnapshotLocked() const {
@@ -152,7 +151,8 @@ RobotSnapshot RobotController::buildSnapshotLocked() const {
     return s;
 }
 
-bool RobotController::patrolStepLocked() {
+bool RobotController::patrolStepReplanned() {
+    std::unique_lock<std::mutex> lock(mutex_);
     if (!patrolActive_) {
         return false;
     }
@@ -163,7 +163,47 @@ bool RobotController::patrolStepLocked() {
         robot_.setLastResult(LastResult::PatrolCompleted);
         return false;
     }
-    const Direction dir = patrolPath_[patrolIndex_++];
+    const Direction dir = patrolPath_[patrolIndex_];
+    // 防御性障碍/边界检测：规划路径本应避开障碍，若异常命中（如地图
+    // 变更或陈旧路径）则报警 BLOCKED_OBSTACLE/BLOCKED_BOUNDARY，并从
+    // 当前位置重规划剩余路径，使巡检具备「碰到障碍物报警并绕行」的健壮性。
+    const Position d = delta(dir);
+    const Position candidate{robot_.position().x + d.x,
+                             robot_.position().y + d.y};
+    if (!grid_.contains(candidate) || grid_.isObstacle(candidate)) {
+        // 复刻 applyManualMove 的「先更新朝向」规则：受阻也更新朝向。
+        robot_.setHeading(dir);
+        robot_.setMotionStatus(MotionStatus::Blocked);
+        robot_.setLastResult(grid_.contains(candidate)
+                                 ? LastResult::BlockedObstacle
+                                 : LastResult::BlockedBoundary);
+        ++sequence_;
+        // I-1：路径规划为 O(N²) 且伴随堆分配，移出临界区执行（与
+        // StartPatrol 一致），避免阻塞其它 API 路由。
+        const Position from = robot_.position();
+        lock.unlock();
+        std::vector<Direction> path = planPatrolPath(grid_, from);
+        lock.lock();
+        if (!patrolActive_) {
+            return false;  // 重规划期间巡检被停止。
+        }
+        if (!(robot_.position() == from)) {
+            // 位置被并发移动（罕见）：就地重规划。
+            path = planPatrolPath(grid_, robot_.position());
+        }
+        patrolPath_ = std::move(path);
+        patrolIndex_ = 0;
+        if (patrolPath_.empty()) {
+            // 无可遍历路径：视为巡检完成。
+            patrolActive_ = false;
+            patrolCv_.notify_all();
+            robot_.setMotionStatus(MotionStatus::Idle);
+            robot_.setLastResult(LastResult::PatrolCompleted);
+            return false;
+        }
+        return true;
+    }
+    ++patrolIndex_;
     robot_.applyManualMove(dir, grid_);
     ++sequence_;
     if (patrolIndex_ >= patrolPath_.size()) {
@@ -184,7 +224,11 @@ void RobotController::patrolLoop() {
         if (!patrolActive_) {
             break;
         }
-        if (!patrolStepLocked()) {
+        // 释放锁后推进一步（步骤内含锁外重规划，避免长时间持锁）。
+        lock.unlock();
+        const bool keepGoing = patrolStepReplanned();
+        lock.lock();
+        if (!keepGoing) {
             break;
         }
     }

@@ -25,6 +25,8 @@ public:
     // 控制层在启动/停止/完成巡检等非移动场景下更新结果与运行状态。
     void setLastResult(LastResult result) { lastResult_ = result; }
     void setMotionStatus(MotionStatus status) { motionStatus_ = status; }
+    // 巡检防御分支受阻时需复刻 applyManualMove 的「先更新朝向」规则。
+    void setHeading(Direction heading) { heading_ = heading; }
 
     Position position() const { return position_; }
     Direction heading() const { return heading_; }
