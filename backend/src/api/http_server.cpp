@@ -1,0 +1,346 @@
+#include "api/http_server.hpp"
+
+#include <atomic>
+#include <cctype>
+#include <cstdio>
+#include <fstream>
+#include <sstream>
+#include <string>
+
+#include "crow.h"
+
+#include "api/command_parser.hpp"
+#include "dto.hpp"
+
+namespace patrol {
+
+namespace {
+
+constexpr std::size_t kMaxBodyBytes = 4096;
+
+// 生成进程内唯一、不透明请求 ID（用于统一错误响应与日志关联）。
+std::string makeRequestId() {
+    static std::atomic<std::uint64_t> counter{0};
+    const std::uint64_t n = counter.fetch_add(1, std::memory_order_relaxed);
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "req-%08llx",
+                  static_cast<unsigned long long>(n));
+    return buffer;
+}
+
+// 去掉首尾空白并转小写，用于 Content-Type 媒体类型比较。
+std::string lowercaseTrimmed(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    std::size_t begin = 0;
+    std::size_t end = out.size();
+    while (begin < end && std::isspace(static_cast<unsigned char>(out[begin]))) {
+        ++begin;
+    }
+    while (end > begin && std::isspace(static_cast<unsigned char>(out[end - 1]))) {
+        --end;
+    }
+    return out.substr(begin, end - begin);
+}
+
+// 判断 Content-Type 是否为 application/json（允许 charset 等参数）。
+bool isJsonContentType(const std::string& contentType) {
+    std::string value = lowercaseTrimmed(contentType);
+    const std::size_t semicolon = value.find(';');
+    if (semicolon != std::string::npos) {
+        value = value.substr(0, semicolon);
+    }
+    value = lowercaseTrimmed(value);
+    return value == "application/json";
+}
+
+// 构造 JSON 响应；head 为 true 时只返回头不返回体（供 HEAD 请求）。
+crow::response jsonResponse(int code, const std::string& body, bool head) {
+    crow::response res(code, head ? std::string{} : body);
+    res.set_header("Content-Type", "application/json; charset=utf-8");
+    return res;
+}
+
+crow::response jsonError(int status, const std::string& code,
+                         const std::string& message,
+                         const std::string& requestId,
+                         const nlohmann::json& details = nlohmann::json::object()) {
+    return jsonResponse(status, errorToJson(code, message, requestId, details).dump(),
+                        false);
+}
+
+// 命令体解析错误码 -> HTTP 错误映射（均为 400）。
+struct ErrorMapping {
+    const char* code;
+    const char* message;
+};
+
+ErrorMapping mapParseError(ParseError error) {
+    switch (error) {
+        case ParseError::MalformedJson:
+            return {"MALFORMED_JSON", "请求体不是合法 JSON"};
+        case ParseError::NotObject:
+            return {"MALFORMED_JSON", "请求体必须是 JSON 对象"};
+        case ParseError::MissingType:
+            return {"MISSING_FIELD", "缺少必填字段 type"};
+        case ParseError::InvalidCommandType:
+            return {"INVALID_COMMAND_TYPE", "type 必须是 MOVE 或 RESET"};
+        case ParseError::MissingDirection:
+            return {"MISSING_FIELD", "MOVE 命令缺少必填字段 direction"};
+        case ParseError::InvalidDirection:
+            return {"INVALID_DIRECTION", "direction 必须是 UP/DOWN/LEFT/RIGHT 之一"};
+        case ParseError::UnknownField:
+            return {"UNKNOWN_FIELD", "存在未知字段"};
+        case ParseError::Ok:
+            return {"INTERNAL_ERROR", "不应出现"};
+    }
+    return {"INTERNAL_ERROR", "不应出现"};
+}
+
+// 命令序列号 -> commandId（8 位零填充）。
+std::string makeCommandId(int sequence) {
+    char buffer[24];
+    std::snprintf(buffer, sizeof(buffer), "cmd-%08d", sequence);
+    return buffer;
+}
+
+// 由文件扩展名推断 MIME 类型。
+std::string mimeTypeFor(const std::string& path) {
+    const std::size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos) {
+        return "application/octet-stream";
+    }
+    const std::string ext = path.substr(dot + 1);
+    if (ext == "html") return "text/html; charset=utf-8";
+    if (ext == "js")   return "application/javascript; charset=utf-8";
+    if (ext == "css")  return "text/css; charset=utf-8";
+    if (ext == "json") return "application/json; charset=utf-8";
+    if (ext == "svg")  return "image/svg+xml";
+    if (ext == "png")  return "image/png";
+    if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
+    if (ext == "gif")  return "image/gif";
+    if (ext == "ico")  return "image/x-icon";
+    if (ext == "woff") return "font/woff";
+    if (ext == "woff2") return "font/woff2";
+    return "application/octet-stream";
+}
+
+// 校验 URL 相对路径安全（禁止 .. 与绝对路径），并拼接文件系统路径。
+bool safeJoin(const std::string& root, const std::string& urlPath,
+              std::string& out) {
+    if (urlPath.empty() || urlPath[0] == '/') {
+        return false;
+    }
+    out = root;
+    std::size_t start = 0;
+    while (start <= urlPath.size()) {
+        const std::size_t slash = urlPath.find('/', start);
+        const std::string segment =
+            urlPath.substr(start, slash == std::string::npos ? std::string::npos
+                                                             : slash - start);
+        if (segment.empty() || segment == "." || segment == "..") {
+            return false;
+        }
+        out += '/';
+        out += segment;
+        if (slash == std::string::npos) {
+            break;
+        }
+        start = slash + 1;
+    }
+    return true;
+}
+
+// 静态文件服务：命中返回文件内容，未命中返回 false。
+crow::response serveStatic(const std::string& root, const std::string& urlPath) {
+    std::string fullPath;
+    if (!safeJoin(root, urlPath, fullPath)) {
+        return crow::response(404, "not found");
+    }
+    std::ifstream in(fullPath, std::ios::binary);
+    if (!in.is_open()) {
+        return crow::response(404, "not found");
+    }
+    std::ostringstream buffer;
+    buffer << in.rdbuf();
+    crow::response res(200, buffer.str());
+    res.set_header("Content-Type", mimeTypeFor(fullPath));
+    return res;
+}
+
+// 已知 API 路由及其允许的方法（用于 405 的 Allow 头）。
+struct ApiRouteSpec {
+    const char* path;
+    const char* allow;
+};
+
+const ApiRouteSpec kApiRoutes[] = {
+    {"/api/v1/health", "GET, HEAD"},
+    {"/api/v1/map", "GET, HEAD"},
+    {"/api/v1/robot", "GET, HEAD"},
+    {"/api/v1/robot/commands", "POST"},
+};
+
+const ApiRouteSpec* findApiRoute(const std::string& fullPath) {
+    for (const auto& spec : kApiRoutes) {
+        if (fullPath == spec.path) {
+            return &spec;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+void runHttpServer(const MapConfig& config,
+                   RobotController& controller,
+                   const std::string& staticRoot,
+                   const std::string& host,
+                   int port) {
+    crow::SimpleApp app;
+
+    // ---- GET /api/v1/health ----
+    CROW_ROUTE(app, "/api/v1/health")
+    ([&controller, &config](const crow::request& req) {
+        if (req.method != crow::HTTPMethod::GET &&
+            req.method != crow::HTTPMethod::HEAD) {
+            crow::response res = jsonError(405, "METHOD_NOT_ALLOWED",
+                                           "资源不支持该 HTTP 方法",
+                                           makeRequestId());
+            res.set_header("Allow", "GET, HEAD");
+            return res;
+        }
+        const bool head = (req.method == crow::HTTPMethod::HEAD);
+        const std::string body =
+            nlohmann::json{{"status", "ok"}, {"instanceId", controller.snapshot().instanceId}}.dump();
+        return jsonResponse(200, body, head);
+    });
+
+    // ---- GET /api/v1/map ----
+    CROW_ROUTE(app, "/api/v1/map")
+    ([&config](const crow::request& req) {
+        if (req.method != crow::HTTPMethod::GET &&
+            req.method != crow::HTTPMethod::HEAD) {
+            crow::response res = jsonError(405, "METHOD_NOT_ALLOWED",
+                                           "资源不支持该 HTTP 方法",
+                                           makeRequestId());
+            res.set_header("Allow", "GET, HEAD");
+            return res;
+        }
+        const bool head = (req.method == crow::HTTPMethod::HEAD);
+        return jsonResponse(
+            200, mapInfoToJson(config.mapId, config.width, config.height).dump(),
+            head);
+    });
+
+    // ---- GET /api/v1/robot ----
+    CROW_ROUTE(app, "/api/v1/robot")
+    ([&controller](const crow::request& req) {
+        if (req.method != crow::HTTPMethod::GET &&
+            req.method != crow::HTTPMethod::HEAD) {
+            crow::response res = jsonError(405, "METHOD_NOT_ALLOWED",
+                                           "资源不支持该 HTTP 方法",
+                                           makeRequestId());
+            res.set_header("Allow", "GET, HEAD");
+            return res;
+        }
+        const bool head = (req.method == crow::HTTPMethod::HEAD);
+        return jsonResponse(200, robotSnapshotToJson(controller.snapshot()).dump(),
+                            head);
+    });
+
+    // ---- POST /api/v1/robot/commands ----
+    CROW_ROUTE(app, "/api/v1/robot/commands")
+    ([&controller](const crow::request& req) {
+        const std::string requestId = makeRequestId();
+
+        if (req.method != crow::HTTPMethod::POST) {
+            crow::response res = jsonError(405, "METHOD_NOT_ALLOWED",
+                                           "资源不支持该 HTTP 方法", requestId);
+            res.set_header("Allow", "POST");
+            return res;
+        }
+
+        // 1) Content-Type 检查。
+        if (!isJsonContentType(req.get_header_value("Content-Type"))) {
+            return jsonError(415, "UNSUPPORTED_MEDIA_TYPE",
+                             "Content-Type 必须是 application/json", requestId);
+        }
+
+        // 2) 请求体大小检查。
+        if (req.body.size() > kMaxBodyBytes) {
+            return jsonError(413, "PAYLOAD_TOO_LARGE",
+                             "请求体超过 4096 字节上限", requestId);
+        }
+
+        // 3) 解析并校验命令体。
+        const CommandParseResult parsed = parseCommandBody(req.body);
+        if (parsed.error != ParseError::Ok) {
+            const ErrorMapping mapping = mapParseError(parsed.error);
+            nlohmann::json details = nlohmann::json::object();
+            if (!parsed.detail.empty()) {
+                details["field"] = parsed.detail;
+            }
+            return jsonError(400, mapping.code, mapping.message, requestId, details);
+        }
+
+        // 4) 执行命令（线程安全，原子地更新状态与序列号）。
+        const CommandOutcome outcome =
+            controller.execute(parsed.command.type, parsed.command.direction);
+
+        nlohmann::json body = {
+            {"commandId", makeCommandId(outcome.robot.sequence)},
+            {"type", parsed.command.type == CommandType::Move ? "MOVE" : "RESET"},
+            {"result", commandResultToString(outcome.result)},
+            {"robot", robotSnapshotToJson(outcome.robot)},
+        };
+        return jsonResponse(201, body.dump(), false);
+    });
+
+    // ---- 根路径 -> index.html ----
+    CROW_ROUTE(app, "/")
+    ([&staticRoot]() {
+        std::ifstream in(staticRoot + "/index.html", std::ios::binary);
+        if (!in.is_open()) {
+            return crow::response(404, "not found");
+        }
+        std::ostringstream buffer;
+        buffer << in.rdbuf();
+        crow::response res(200, buffer.str());
+        res.set_header("Content-Type", "text/html; charset=utf-8");
+        return res;
+    });
+
+    // ---- 兜底路由：未知 API 路径与静态资源 ----
+    CROW_ROUTE(app, "/<path>")
+    ([&staticRoot](const crow::request& req, std::string path) {
+        // /api/ 前缀：未知路由返回 JSON 404；已知路由但方法不符返回 405。
+        if (path.rfind("api/", 0) == 0) {
+            const std::string fullPath = "/" + path;
+            if (const ApiRouteSpec* spec = findApiRoute(fullPath)) {
+                crow::response res = jsonError(405, "METHOD_NOT_ALLOWED",
+                                               "资源不支持该 HTTP 方法",
+                                               makeRequestId());
+                res.set_header("Allow", spec->allow);
+                return res;
+            }
+            return jsonError(404, "ROUTE_NOT_FOUND", "未找到该 API 路由",
+                             makeRequestId());
+        }
+        // 非 API：静态文件（GET/HEAD），其余方法 405。
+        if (req.method != crow::HTTPMethod::GET &&
+            req.method != crow::HTTPMethod::HEAD) {
+            crow::response res(405, "method not allowed");
+            res.set_header("Allow", "GET, HEAD");
+            return res;
+        }
+        return serveStatic(staticRoot, path);
+    });
+
+    app.port(port).bindaddr(host).multithreaded().run();
+}
+
+}  // namespace patrol
