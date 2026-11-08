@@ -83,5 +83,43 @@ TEST(PatrolPlannerTest, StartOnObstacleReturnsEmpty) {
     EXPECT_TRUE(planPatrolPath(grid, {0, 0}).empty());
 }
 
+// 无障碍最优性：Boustrophedon 单元分解版覆盖 N 格恰好 N-1 步。
+TEST(PatrolPlannerTest, BoustrophedonOptimalOnEmptyGrid) {
+    const Grid grid(6, 7);
+    const std::vector<Direction> path =
+        planPatrolPathBoustrophedon(grid, {0, 0});
+    EXPECT_EQ(path.size(), 6u * 7u - 1u);
+    EXPECT_EQ(simulate(grid, {0, 0}, path), allWalkable(grid));
+}
+
+// 组合策略保证：planPatrolPath（=两算法较短者）永不劣于贪心，
+// 且 Boustrophedon 与贪心各自都覆盖全部可通行格（正确性独立成立）。
+TEST(PatrolPlannerTest, PortfolioNoWorseThanGreedy) {
+    const std::vector<std::vector<Position>> maps = {
+        {{2, 0}, {2, 1}, {2, 2}},
+        {{1, 1}, {2, 1}, {4, 2}, {4, 3}, {4, 4}, {0, 5}},
+        {{1, 0}, {1, 1}, {1, 2}, {3, 1}, {3, 2}, {3, 3}},
+        {{2, 2}, {3, 2}, {2, 3}},
+        {{0, 3}, {1, 3}, {2, 3}, {3, 3}},
+    };
+    for (const auto& obstacles : maps) {
+        const Grid grid(6, 6, obstacles);
+        const std::vector<Direction> boustrophedon =
+            planPatrolPathBoustrophedon(grid, {0, 0});
+        const std::vector<Direction> greedy =
+            planPatrolPathGreedy(grid, {0, 0});
+        const std::vector<Direction> portfolio = planPatrolPath(grid, {0, 0});
+
+        // 三者都覆盖全部可通行格（正确性独立成立）。
+        EXPECT_EQ(simulate(grid, {0, 0}, boustrophedon), allWalkable(grid));
+        EXPECT_EQ(simulate(grid, {0, 0}, greedy), allWalkable(grid));
+        EXPECT_EQ(simulate(grid, {0, 0}, portfolio), allWalkable(grid));
+
+        // 组合策略永不劣于贪心，也不劣于 Boustrophedon。
+        EXPECT_LE(portfolio.size(), greedy.size());
+        EXPECT_LE(portfolio.size(), boustrophedon.size());
+    }
+}
+
 }  // namespace
 }  // namespace patrol
