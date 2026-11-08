@@ -163,7 +163,26 @@ bool RobotController::patrolStepLocked() {
         robot_.setLastResult(LastResult::PatrolCompleted);
         return false;
     }
-    const Direction dir = patrolPath_[patrolIndex_++];
+    const Direction dir = patrolPath_[patrolIndex_];
+    // 防御性障碍/边界检测：规划路径本应避开障碍，若异常命中（如地图
+    // 变更或陈旧路径）则报警 BLOCKED_OBSTACLE/BLOCKED_BOUNDARY，并从
+    // 当前位置重规划剩余路径，使巡检具备「碰到障碍物报警并绕行」的健壮性。
+    const Position d = delta(dir);
+    const Position candidate{robot_.position().x + d.x,
+                             robot_.position().y + d.y};
+    if (!grid_.contains(candidate) || grid_.isObstacle(candidate)) {
+        robot_.setMotionStatus(MotionStatus::Blocked);
+        robot_.setLastResult(grid_.contains(candidate)
+                                 ? LastResult::BlockedObstacle
+                                 : LastResult::BlockedBoundary);
+        ++sequence_;
+        // 从当前位置重规划（防御性分支，正常静态地图不会触发；重规划会
+        // 覆盖已遍历格，但保证继续绕行且最终完成遍历）。
+        patrolPath_ = planPatrolPath(grid_, robot_.position());
+        patrolIndex_ = 0;
+        return true;
+    }
+    ++patrolIndex_;
     robot_.applyManualMove(dir, grid_);
     ++sequence_;
     if (patrolIndex_ >= patrolPath_.size()) {
