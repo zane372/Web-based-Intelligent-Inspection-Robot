@@ -5,6 +5,8 @@
 响应读取 sequence；不依赖进程启动初态。
 """
 
+import time
+
 
 def _post(client, base_url, payload, timeout=2):
     return client.post(
@@ -39,6 +41,8 @@ def test_map_contract(client, base_url):
     assert body["origin"] == "TOP_LEFT"
     assert body["xAxis"] == "RIGHT"
     assert body["yAxis"] == "DOWN"
+    assert isinstance(body["obstacles"], list)
+    assert all(set(o) == {"x", "y"} for o in body["obstacles"])
 
 
 def test_robot_contract(client, base_url):
@@ -53,9 +57,11 @@ def test_robot_contract(client, base_url):
         "motionStatus",
         "lastResult",
         "sequence",
+        "patrolActive",
     ):
         assert key in body
     assert set(body["position"]) == {"x", "y"}
+    assert isinstance(body["patrolActive"], bool)
 
 
 # ---- 移动与边界 ----
@@ -106,6 +112,52 @@ def test_boundary_block_and_recover(client, base_url):
     assert body["result"] == "MOVED"
     assert body["robot"]["position"] == {"x": 1, "y": 0}
     assert body["robot"]["motionStatus"] == "IDLE"
+
+
+def test_obstacle_block_and_recover(client, base_url):
+    _reset(client, base_url)
+    # 移动到 (4,3)，下方 (4,4) 是默认障碍物。
+    for _ in range(4):
+        _post(client, base_url, {"type": "MOVE", "direction": "RIGHT"})
+    for _ in range(3):
+        _post(client, base_url, {"type": "MOVE", "direction": "DOWN"})
+    resp = _post(client, base_url, {"type": "MOVE", "direction": "DOWN"})
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["result"] == "BLOCKED_OBSTACLE"
+    assert body["robot"]["position"] == {"x": 4, "y": 3}
+    assert body["robot"]["heading"] == "DOWN"
+    assert body["robot"]["motionStatus"] == "BLOCKED"
+    assert body["robot"]["lastResult"] == "BLOCKED_OBSTACLE"
+    # 向右移动应恢复 IDLE。
+    body = _post(client, base_url, {"type": "MOVE", "direction": "RIGHT"}).json()
+    assert body["result"] == "MOVED"
+    assert body["robot"]["motionStatus"] == "IDLE"
+
+
+def test_auto_patrol_start_and_stop(client, base_url):
+    _reset(client, base_url)
+    resp = _post(client, base_url, {"type": "START_PATROL"})
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["result"] == "PATROL_STARTED"
+    assert body["robot"]["patrolActive"] is True
+    start_seq = body["robot"]["sequence"]
+    # 后台线程每 250ms 推进一格；轮询等待 sequence 增长。
+    deadline = time.time() + 10
+    got = None
+    while time.time() < deadline:
+        got = client.get(f"{base_url}/api/v1/robot", timeout=2).json()
+        if got["sequence"] >= start_seq + 3:
+            break
+        time.sleep(0.5)
+    assert got is not None and got["sequence"] >= start_seq + 3
+    assert got["patrolActive"] is True
+    # 停止巡检。
+    stop = _post(client, base_url, {"type": "STOP_PATROL"})
+    assert stop.status_code == 201
+    assert stop.json()["result"] == "PATROL_STOPPED"
+    assert stop.json()["robot"]["patrolActive"] is False
 
 
 # ---- 重置与序列号 ----
