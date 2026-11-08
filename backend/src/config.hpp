@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "domain/types.hpp"
 
@@ -13,6 +14,8 @@ struct MapConfig {
     int height{0};
     Position initialPosition;
     Direction initialHeading{Direction::Right};
+    // 障碍物单元格（可选，缺省为空表示无障碍）。
+    std::vector<Position> obstacles;
 };
 
 // 读取并校验配置文件。校验失败抛 std::runtime_error，消息注明具体字段。

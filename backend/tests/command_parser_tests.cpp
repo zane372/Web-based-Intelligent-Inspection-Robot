@@ -73,5 +73,33 @@ TEST(CommandParserTest, InvalidDirection) {
     EXPECT_EQ(b.detail, "direction");
 }
 
+// 自动巡检命令：仅需 type，不带 direction。
+TEST(CommandParserTest, ValidStartPatrol) {
+    const CommandParseResult r = parseCommandBody(R"({"type":"START_PATROL"})");
+    EXPECT_EQ(r.error, ParseError::Ok);
+    EXPECT_EQ(r.command.type, CommandType::StartPatrol);
+}
+
+TEST(CommandParserTest, ValidStopPatrol) {
+    const CommandParseResult r = parseCommandBody(R"({"type":"STOP_PATROL"})");
+    EXPECT_EQ(r.error, ParseError::Ok);
+    EXPECT_EQ(r.command.type, CommandType::StopPatrol);
+}
+
+// 巡检命令携带 direction 应判为未知字段（仅 type 是已知字段）。
+TEST(CommandParserTest, StartPatrolRejectsDirection) {
+    const CommandParseResult r =
+        parseCommandBody(R"({"type":"START_PATROL","direction":"UP"})");
+    EXPECT_EQ(r.error, ParseError::UnknownField);
+    EXPECT_EQ(r.detail, "direction");
+}
+
+TEST(CommandParserTest, StopPatrolRejectsDirection) {
+    const CommandParseResult r =
+        parseCommandBody(R"({"type":"STOP_PATROL","direction":"UP"})");
+    EXPECT_EQ(r.error, ParseError::UnknownField);
+    EXPECT_EQ(r.detail, "direction");
+}
+
 }  // namespace
 }  // namespace patrol

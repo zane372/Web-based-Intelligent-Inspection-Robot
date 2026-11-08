@@ -3,6 +3,7 @@
 // 边界层：C++ 枚举 <-> 大写蛇形字符串，以及对外 JSON DTO。
 // 集中在这一层，避免 domain 模块依赖字符串或 JSON。
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -42,7 +43,11 @@ inline std::string lastResultToString(LastResult r) {
         case LastResult::None:            return "NONE";
         case LastResult::Moved:           return "MOVED";
         case LastResult::BlockedBoundary: return "BLOCKED_BOUNDARY";
+        case LastResult::BlockedObstacle: return "BLOCKED_OBSTACLE";
         case LastResult::Reset:           return "RESET";
+        case LastResult::PatrolStarted:   return "PATROL_STARTED";
+        case LastResult::PatrolStopped:   return "PATROL_STOPPED";
+        case LastResult::PatrolCompleted: return "PATROL_COMPLETED";
     }
     return "NONE";
 }
@@ -51,13 +56,31 @@ inline std::string commandResultToString(CommandResult r) {
     switch (r) {
         case CommandResult::Moved:           return "MOVED";
         case CommandResult::BlockedBoundary: return "BLOCKED_BOUNDARY";
+        case CommandResult::BlockedObstacle: return "BLOCKED_OBSTACLE";
         case CommandResult::Reset:           return "RESET";
+        case CommandResult::PatrolStarted:   return "PATROL_STARTED";
+        case CommandResult::PatrolStopped:   return "PATROL_STOPPED";
     }
     return "MOVED";
 }
 
+inline std::string commandTypeToString(CommandType t) {
+    switch (t) {
+        case CommandType::Move:       return "MOVE";
+        case CommandType::Reset:      return "RESET";
+        case CommandType::StartPatrol: return "START_PATROL";
+        case CommandType::StopPatrol:  return "STOP_PATROL";
+    }
+    return "MOVE";
+}
+
 // GET /api/v1/map 响应体。
-inline nlohmann::json mapInfoToJson(const std::string& mapId, int width, int height) {
+inline nlohmann::json mapInfoToJson(const std::string& mapId, int width, int height,
+                                    const std::vector<Position>& obstacles) {
+    nlohmann::json arr = nlohmann::json::array();
+    for (const Position p : obstacles) {
+        arr.push_back({{"x", p.x}, {"y", p.y}});
+    }
     return nlohmann::json{
         {"mapId", mapId},
         {"width", width},
@@ -65,6 +88,7 @@ inline nlohmann::json mapInfoToJson(const std::string& mapId, int width, int hei
         {"origin", "TOP_LEFT"},
         {"xAxis", "RIGHT"},
         {"yAxis", "DOWN"},
+        {"obstacles", arr},
     };
 }
 
@@ -78,6 +102,7 @@ inline nlohmann::json robotSnapshotToJson(const RobotSnapshot& s) {
         {"motionStatus", motionStatusToString(s.motionStatus)},
         {"lastResult", lastResultToString(s.lastResult)},
         {"sequence", s.sequence},
+        {"patrolActive", s.patrolActive},
     };
 }
 

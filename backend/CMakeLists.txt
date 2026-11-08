@@ -51,6 +51,7 @@ find_package(Threads REQUIRED)
 add_library(patrol_core STATIC
   src/domain/grid.cpp
   src/domain/robot.cpp
+  src/domain/patrol_planner.cpp
   src/control/robot_controller.cpp
   src/config.cpp
   src/api/command_parser.cpp
@@ -74,6 +75,7 @@ add_executable(domain_tests
   tests/domain_tests.cpp
   tests/controller_tests.cpp
   tests/command_parser_tests.cpp
+  tests/patrol_planner_tests.cpp
 )
 target_link_libraries(domain_tests PRIVATE patrol_core GTest::gtest_main)
 add_test(NAME domain_tests COMMAND domain_tests)

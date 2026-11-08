@@ -105,7 +105,8 @@ ErrorMapping mapParseError(ParseError error) {
         case ParseError::MissingType:
             return {"MISSING_FIELD", "缺少必填字段 type"};
         case ParseError::InvalidCommandType:
-            return {"INVALID_COMMAND_TYPE", "type 必须是 MOVE 或 RESET"};
+            return {"INVALID_COMMAND_TYPE",
+                    "type 必须是 MOVE/RESET/START_PATROL/STOP_PATROL 之一"};
         case ParseError::MissingDirection:
             return {"MISSING_FIELD", "MOVE 命令缺少必填字段 direction"};
         case ParseError::InvalidDirection:
@@ -252,7 +253,9 @@ void runHttpServer(const MapConfig& config,
         }
         const bool head = (req.method == crow::HTTPMethod::HEAD);
         return jsonResponse(
-            200, mapInfoToJson(config.mapId, config.width, config.height).dump(),
+            200,
+            mapInfoToJson(config.mapId, config.width, config.height, config.obstacles)
+                .dump(),
             head);
     });
 
@@ -318,7 +321,7 @@ void runHttpServer(const MapConfig& config,
 
         nlohmann::json body = {
             {"commandId", makeCommandId(outcome.robot.sequence)},
-            {"type", parsed.command.type == CommandType::Move ? "MOVE" : "RESET"},
+            {"type", commandTypeToString(parsed.command.type)},
             {"result", commandResultToString(outcome.result)},
             {"robot", robotSnapshotToJson(outcome.robot)},
         };

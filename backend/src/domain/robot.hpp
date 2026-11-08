@@ -15,11 +15,16 @@ public:
     // 按规格顺序执行一次移动：
     // 1) 先把朝向更新为命令方向；
     // 2) 计算候选位置；
-    // 3) 越界则位置不变并标记 Blocked，否则移动到候选位置并恢复 Idle。
+    // 3) 越界则位置不变并标记 Blocked；否则若为障碍物同样阻止；
+    //    界内且无障碍则移动到候选位置并恢复 Idle。
     MoveResult applyManualMove(Direction direction, const Grid& grid);
 
     // 恢复到给定初始姿态，运行状态恢复 Idle，最近结果记为 Reset。
     void reset(Position initialPosition, Direction initialHeading);
+
+    // 控制层在启动/停止/完成巡检等非移动场景下更新结果与运行状态。
+    void setLastResult(LastResult result) { lastResult_ = result; }
+    void setMotionStatus(MotionStatus status) { motionStatus_ = status; }
 
     Position position() const { return position_; }
     Direction heading() const { return heading_; }

@@ -40,13 +40,17 @@ CommandParseResult parseCommandBody(const std::string& body) {
         result.command.type = CommandType::Move;
     } else if (type == "RESET") {
         result.command.type = CommandType::Reset;
+    } else if (type == "START_PATROL") {
+        result.command.type = CommandType::StartPatrol;
+    } else if (type == "STOP_PATROL") {
+        result.command.type = CommandType::StopPatrol;
     } else {
         result.error = ParseError::InvalidCommandType;
         result.detail = "type";
         return result;
     }
 
-    // 4) 未知字段检查（按命令类型区分：MOVE 允许 type/direction，RESET 仅允许 type）。
+    // 4) 未知字段检查（MOVE 允许 type/direction，其余命令仅允许 type）。
     const bool isMove = result.command.type == CommandType::Move;
     for (auto it = root.begin(); it != root.end(); ++it) {
         const std::string key = it.key();

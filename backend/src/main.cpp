@@ -54,12 +54,13 @@ int main() {
         return 1;
     }
 
-    Grid grid(config.width, config.height);
+    Grid grid(config.width, config.height, config.obstacles);
     Robot robot(config.initialPosition, config.initialHeading);
     RobotController controller(grid, robot, "robot-1", makeInstanceId());
 
     std::cout << "[patrol_server] mapId=" << config.mapId
               << " size=" << config.width << 'x' << config.height
+              << " obstacles=" << config.obstacles.size()
               << " initial=(" << config.initialPosition.x << ','
               << config.initialPosition.y << ") staticRoot=" << staticRoot
               << " listen=" << host << ':' << port << '\n';

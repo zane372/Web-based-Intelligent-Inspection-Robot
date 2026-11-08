@@ -37,13 +37,18 @@ enum class LastResult {
     None,             // 尚未执行过任何命令（进程启动初态）
     Moved,            // 成功移动一格
     BlockedBoundary,  // 越界被阻止，位置不变
+    BlockedObstacle,  // 前方为障碍物被阻止，位置不变
     Reset,            // 已重置到初始状态
+    PatrolStarted,    // 自动巡检已启动
+    PatrolStopped,    // 自动巡检被手动停止
+    PatrolCompleted,  // 自动巡检已遍历完成
 };
 
 // 单次移动命令的结果（只用于移动，不包含 Reset）。
 enum class MoveResult {
     Moved,
     BlockedBoundary,
+    BlockedObstacle,
 };
 
 // 四方向坐标增量：x 向右、y 向下。

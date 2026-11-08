@@ -73,12 +73,35 @@ MapConfig loadMapConfig(const std::string& path) {
         throw std::runtime_error("initialRobot 初始位置越界");
     }
 
+    // 可选 obstacles 数组：每个元素 {x, y}，须在界内且不与初始位置重合。
+    std::vector<Position> obstacles;
+    if (root.contains("obstacles")) {
+        if (!root["obstacles"].is_array()) {
+            throw std::runtime_error("obstacles 必须是数组");
+        }
+        for (const nlohmann::json& o : root["obstacles"]) {
+            if (!o.is_object() || !o.contains("x") || !o["x"].is_number_integer() ||
+                !o.contains("y") || !o["y"].is_number_integer()) {
+                throw std::runtime_error("obstacles 元素必须是 {x, y} 整数对象");
+            }
+            const Position pos{o["x"].get<int>(), o["y"].get<int>()};
+            if (pos.x < 0 || pos.x >= width || pos.y < 0 || pos.y >= height) {
+                throw std::runtime_error("obstacles 元素越界");
+            }
+            if (pos == initialPosition) {
+                throw std::runtime_error("obstacles 不能与初始位置重合");
+            }
+            obstacles.push_back(pos);
+        }
+    }
+
     MapConfig config;
     config.mapId = root["mapId"].get<std::string>();
     config.width = width;
     config.height = height;
     config.initialPosition = initialPosition;
     config.initialHeading = initialHeading;
+    config.obstacles = std::move(obstacles);
     return config;
 }
 

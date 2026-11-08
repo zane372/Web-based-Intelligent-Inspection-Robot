@@ -91,5 +91,93 @@ TEST(RobotControllerTest, ConcurrentExecuteKeepsSequenceAtomic) {
     EXPECT_EQ(snap.position, Position({19, 0}));
 }
 
+// ---- 自动巡检 ----
+
+// 3x3 无障碍小地图，确定性驱动巡检。
+RobotController makeSmallController() {
+    Grid grid(3, 3);
+    Robot robot(Position{0, 0}, Direction::Right);
+    RobotController controller(grid, robot, "robot-1", "inst-patrol");
+    // 调大间隔，避免后台线程干扰确定性驱动。
+    controller.setPatrolIntervalMs(600000);
+    return controller;
+}
+
+// 启动巡检：patrolActive 置位、结果 PatrolStarted、序列号 +1。
+TEST(RobotControllerTest, StartPatrolActivates) {
+    RobotController controller = makeSmallController();
+    const CommandOutcome outcome =
+        controller.execute(CommandType::StartPatrol, Direction::Right);
+    EXPECT_EQ(outcome.result, CommandResult::PatrolStarted);
+    EXPECT_TRUE(outcome.robot.patrolActive);
+    EXPECT_EQ(outcome.robot.lastResult, LastResult::PatrolStarted);
+    EXPECT_EQ(outcome.robot.sequence, 1);
+}
+
+// 巡检推进一步：位置变化、序列号 +1、仍在巡检中。
+TEST(RobotControllerTest, PatrolStepAdvances) {
+    RobotController controller = makeSmallController();
+    controller.execute(CommandType::StartPatrol, Direction::Right);
+
+    EXPECT_TRUE(controller.patrolStep());
+    RobotSnapshot snap = controller.snapshot();
+    EXPECT_TRUE(snap.patrolActive);
+    EXPECT_EQ(snap.sequence, 2);  // 启动 +1，推进一步 +1
+}
+
+// 巡检遍历完所有可通行格后自动完成：patrolActive 清除、结果 PatrolCompleted。
+TEST(RobotControllerTest, PatrolCompletesAutomatically) {
+    RobotController controller = makeSmallController();
+    controller.execute(CommandType::StartPatrol, Direction::Right);
+
+    // 3x3 无障碍共 9 格，起点已访问，需 8 步遍历完毕。
+    for (int i = 0; i < 8; ++i) {
+        ASSERT_TRUE(controller.patrolStep()) << "第 " << i << " 步仍应在巡检中";
+    }
+    const RobotSnapshot snap = controller.snapshot();
+    EXPECT_FALSE(snap.patrolActive);
+    EXPECT_EQ(snap.lastResult, LastResult::PatrolCompleted);
+    EXPECT_EQ(snap.sequence, 1 + 8);  // 启动 1 + 8 步
+}
+
+// 停止巡检：patrolActive 清除、结果 PatrolStopped、序列号 +1。
+TEST(RobotControllerTest, StopPatrolStops) {
+    RobotController controller = makeSmallController();
+    controller.execute(CommandType::StartPatrol, Direction::Right);
+    controller.patrolStep();
+
+    const CommandOutcome outcome =
+        controller.execute(CommandType::StopPatrol, Direction::Right);
+    EXPECT_EQ(outcome.result, CommandResult::PatrolStopped);
+    EXPECT_FALSE(outcome.robot.patrolActive);
+    EXPECT_EQ(outcome.robot.lastResult, LastResult::PatrolStopped);
+    EXPECT_EQ(outcome.robot.sequence, 3);  // 启动 + 一步 + 停止
+}
+
+// 手动命令隐式停止巡检。
+TEST(RobotControllerTest, ManualMoveStopsPatrol) {
+    RobotController controller = makeSmallController();
+    controller.execute(CommandType::StartPatrol, Direction::Right);
+    controller.patrolStep();
+
+    const CommandOutcome outcome =
+        controller.execute(CommandType::Move, Direction::Right);
+    EXPECT_EQ(outcome.result, CommandResult::Moved);
+    EXPECT_FALSE(outcome.robot.patrolActive);
+}
+
+// 已在巡检时再次启动为幂等空操作：不改变序列号。
+TEST(RobotControllerTest, StartPatrolWhileActiveIsIdempotent) {
+    RobotController controller = makeSmallController();
+    controller.execute(CommandType::StartPatrol, Direction::Right);
+    const int seqBefore = controller.snapshot().sequence;
+
+    const CommandOutcome outcome =
+        controller.execute(CommandType::StartPatrol, Direction::Right);
+    EXPECT_EQ(outcome.result, CommandResult::PatrolStarted);
+    EXPECT_TRUE(outcome.robot.patrolActive);
+    EXPECT_EQ(outcome.robot.sequence, seqBefore);
+}
+
 }  // namespace
 }  // namespace patrol

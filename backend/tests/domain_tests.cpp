@@ -168,5 +168,41 @@ TEST(DomainGridTest, Contains) {
     EXPECT_FALSE(grid.contains({0, 20}));
 }
 
+// Grid 障碍物标记与可通行判断。
+TEST(DomainGridTest, Obstacles) {
+    const Grid grid(20, 20, {{4, 4}, {5, 4}});
+    EXPECT_FALSE(grid.isObstacle({0, 0}));
+    EXPECT_TRUE(grid.isObstacle({4, 4}));
+    EXPECT_TRUE(grid.isObstacle({5, 4}));
+    EXPECT_TRUE(grid.isWalkable({0, 0}));
+    EXPECT_FALSE(grid.isWalkable({4, 4}));
+    // 界外既非可通行，也不报障碍物（contains 先行短路）。
+    EXPECT_FALSE(grid.isWalkable({-1, 0}));
+}
+
+// 前方为障碍物：位置不变、朝向更新、运行状态 Blocked。
+TEST(DomainRobotTest, BlockedByObstacle) {
+    const Grid grid(20, 20, {{1, 0}});
+    Robot robot = robotAt({0, 0}, Direction::Right);
+    const MoveResult result = robot.applyManualMove(Direction::Right, grid);
+    EXPECT_EQ(result, MoveResult::BlockedObstacle);
+    EXPECT_EQ(robot.position(), Position({0, 0}));
+    EXPECT_EQ(robot.heading(), Direction::Right);
+    EXPECT_EQ(robot.motionStatus(), MotionStatus::Blocked);
+    EXPECT_EQ(robot.lastResult(), LastResult::BlockedObstacle);
+}
+
+// 障碍阻止后，下一次无障碍方向的移动可恢复 Idle。
+TEST(DomainRobotTest, RecoverAfterObstacleBlocked) {
+    const Grid grid(20, 20, {{1, 0}});
+    Robot robot = robotAt({0, 0}, Direction::Right);
+    robot.applyManualMove(Direction::Right, grid);  // 被障碍阻止
+    EXPECT_EQ(robot.motionStatus(), MotionStatus::Blocked);
+    const MoveResult result = robot.applyManualMove(Direction::Down, grid);
+    EXPECT_EQ(result, MoveResult::Moved);
+    EXPECT_EQ(robot.position(), Position({0, 1}));
+    EXPECT_EQ(robot.motionStatus(), MotionStatus::Idle);
+}
+
 }  // namespace
 }  // namespace patrol
