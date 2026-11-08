@@ -236,6 +236,12 @@ button:not(:disabled):hover {
 @media (max-width: 800px) {
   #layout {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  #map-panel {
+    flex: 1 1 auto;
+    width: 100%;
   }
 
   #side-panel {
