@@ -36,13 +36,14 @@ def test_map_contract(client, base_url):
     assert resp.status_code == 200
     body = resp.json()
     assert body["mapId"]
-    assert body["width"] == 20
-    assert body["height"] == 20
+    assert body["width"] == 30
+    assert body["height"] == 30
     assert body["origin"] == "TOP_LEFT"
     assert body["xAxis"] == "RIGHT"
     assert body["yAxis"] == "DOWN"
     assert isinstance(body["obstacles"], list)
     assert all(set(o) == {"x", "y"} for o in body["obstacles"])
+    assert len(body["obstacles"]) >= 30
 
 
 def test_robot_contract(client, base_url):
