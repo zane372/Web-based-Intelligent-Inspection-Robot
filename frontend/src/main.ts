@@ -8,6 +8,7 @@ import type { CommandType, Heading } from "./types";
 
 const POLL_INTERVAL_MS = 1000;
 const BOUNDARY_FEEDBACK_MS = 1500;
+const PATROL_ALERT_MS = 1500;
 const LOAD_RETRY_COUNT = 3;
 const LOAD_RETRY_DELAY_MS = 1000;
 
@@ -42,9 +43,21 @@ let state: AppState = createInitialState();
 let ctx: CanvasRenderingContext2D | null = null;
 let pollTimer: number | undefined;
 let feedbackTimer: number | undefined;
+let patrolAlertTimer: number | undefined;
 
 function dispatch(event: AppEvent): void {
   state = reduce(state, event);
+  // 巡检受阻报警锁存：新报警起一次性定时器，超时清除；巡检结束/重载
+  // 清除时同步取消定时器。
+  if (state.patrolAlert && patrolAlertTimer === undefined) {
+    patrolAlertTimer = window.setTimeout(() => {
+      patrolAlertTimer = undefined;
+      dispatch({ type: "patrolAlertTimeout" });
+    }, PATROL_ALERT_MS);
+  } else if (!state.patrolAlert && patrolAlertTimer !== undefined) {
+    window.clearTimeout(patrolAlertTimer);
+    patrolAlertTimer = undefined;
+  }
   if (state.instanceChanged) {
     void loadAll();
   }
@@ -53,13 +66,16 @@ function dispatch(event: AppEvent): void {
 }
 
 function statusText(s: AppState): string {
-  // 巡检期间碰到障碍物：优先显示报警（机器人停在原地并重规划绕行路径）。
+  // 巡检期间受阻（障碍/边界）：优先显示报警锁存。patrolAlert 由状态机
+  // 锁存 PATROL_ALERT_MS，避免 250ms 巡检间隔下报警态被下一步 MOVED 秒覆盖。
   if (
     (s.ui === "READY" || s.ui === "EXECUTING") &&
     s.robot?.patrolActive &&
-    s.robot.lastResult === "BLOCKED_OBSTACLE"
+    s.patrolAlert !== null
   ) {
-    return "巡检碰到障碍物，正在绕行";
+    return s.patrolAlert === "BLOCKED_OBSTACLE"
+      ? "巡检碰到障碍物，正在绕行"
+      : "巡检到达边界，正在绕行";
   }
   // 巡检提示只在连接可用时显示，避免掩盖断线/降级等更高优先级状态。
   if ((s.ui === "READY" || s.ui === "EXECUTING") && s.robot?.patrolActive) {

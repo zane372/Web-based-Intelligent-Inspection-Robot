@@ -133,4 +133,75 @@ describe("state reducer", () => {
     expect(s2.ui).toBe("EXECUTING");
     expect(s2.robot?.sequence).toBe(1);
   });
+
+  it("巡检期间受阻（障碍物）设置报警锁存", () => {
+    const s0 = reduce(createInitialState(), {
+      type: "loaded", map, robot: robot({ patrolActive: true, sequence: 10 }),
+    });
+    const s1 = reduce(s0, {
+      type: "pollOk",
+      robot: robot({
+        patrolActive: true, sequence: 11,
+        motionStatus: "BLOCKED", lastResult: "BLOCKED_OBSTACLE",
+      }),
+    });
+    expect(s1.patrolAlert).toBe("BLOCKED_OBSTACLE");
+  });
+
+  it("巡检期间受阻（边界）设置报警锁存", () => {
+    const s0 = reduce(createInitialState(), {
+      type: "loaded", map, robot: robot({ patrolActive: true, sequence: 10 }),
+    });
+    const s1 = reduce(s0, {
+      type: "pollOk",
+      robot: robot({
+        patrolActive: true, sequence: 11,
+        motionStatus: "BLOCKED", lastResult: "BLOCKED_BOUNDARY",
+      }),
+    });
+    expect(s1.patrolAlert).toBe("BLOCKED_BOUNDARY");
+  });
+
+  it("报警锁存跨后续 MOVED 轮询保持，超时清除", () => {
+    let s = reduce(createInitialState(), {
+      type: "loaded", map, robot: robot({ patrolActive: true, sequence: 10 }),
+    });
+    s = reduce(s, {
+      type: "pollOk",
+      robot: robot({
+        patrolActive: true, sequence: 11,
+        motionStatus: "BLOCKED", lastResult: "BLOCKED_OBSTACLE",
+      }),
+    });
+    expect(s.patrolAlert).toBe("BLOCKED_OBSTACLE");
+    // 下一步 MOVED：锁存保持，不被覆盖。
+    s = reduce(s, {
+      type: "pollOk",
+      robot: robot({ patrolActive: true, sequence: 12, lastResult: "MOVED" }),
+    });
+    expect(s.patrolAlert).toBe("BLOCKED_OBSTACLE");
+    // 超时清除。
+    s = reduce(s, { type: "patrolAlertTimeout" });
+    expect(s.patrolAlert).toBeNull();
+  });
+
+  it("巡检结束清除报警锁存", () => {
+    let s = reduce(createInitialState(), {
+      type: "loaded", map, robot: robot({ patrolActive: true, sequence: 10 }),
+    });
+    s = reduce(s, {
+      type: "pollOk",
+      robot: robot({
+        patrolActive: true, sequence: 11,
+        motionStatus: "BLOCKED", lastResult: "BLOCKED_OBSTACLE",
+      }),
+    });
+    expect(s.patrolAlert).toBe("BLOCKED_OBSTACLE");
+    // patrolActive 变 false（巡检完成/停止）→ 锁存清除。
+    s = reduce(s, {
+      type: "pollOk",
+      robot: robot({ patrolActive: false, sequence: 12, lastResult: "PATROL_COMPLETED" }),
+    });
+    expect(s.patrolAlert).toBeNull();
+  });
 });
