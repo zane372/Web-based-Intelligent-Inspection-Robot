@@ -10,7 +10,7 @@ RUN npm run build
 FROM gcc:12-bookworm AS cpp-build
 WORKDIR /src
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends cmake ninja-build git ca-certificates libboost-system-dev \
+    && apt-get install -y --no-install-recommends cmake ninja-build git ca-certificates libboost-system-dev libasio-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY backend/ ./backend/
 RUN cmake -S backend -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
