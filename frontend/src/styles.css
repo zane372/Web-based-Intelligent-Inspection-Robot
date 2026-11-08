@@ -35,6 +35,12 @@ h1 {
   margin: 0;
 }
 
+.subtitle {
+  margin: -6px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
 /* 地图容器：宽度限制在视口内，画布按宽度等比缩放。 */
 #map-container {
   width: 100%;
@@ -162,4 +168,30 @@ button:not(:disabled):hover {
 
 #btn-reconnect:not(:disabled):hover {
   background: #1d4ed8;
+}
+
+/* 使用帮助区。 */
+#help {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+#help h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#help ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+}
+
+#help li {
+  margin: 2px 0;
 }

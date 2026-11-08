@@ -17,6 +17,7 @@ const positionEl = document.querySelector<HTMLElement>("#readout-position");
 const headingEl = document.querySelector<HTMLElement>("#readout-heading");
 const lastResultEl = document.querySelector<HTMLElement>("#readout-last-result");
 const sequenceEl = document.querySelector<HTMLElement>("#readout-sequence");
+const motionStatusEl = document.querySelector<HTMLElement>("#readout-motion-status");
 
 const btnUp = document.querySelector<HTMLButtonElement>("#btn-up");
 const btnDown = document.querySelector<HTMLButtonElement>("#btn-down");
@@ -27,7 +28,7 @@ const btnReconnect = document.querySelector<HTMLButtonElement>("#btn-reconnect")
 
 // DOM 元素在 index.html 中静态声明；若缺失属配置错误，立即暴露。
 const elements = [
-  canvas, statusEl, positionEl, headingEl, lastResultEl, sequenceEl,
+  canvas, statusEl, positionEl, headingEl, lastResultEl, sequenceEl, motionStatusEl,
   btnUp, btnDown, btnLeft, btnRight, btnReset, btnReconnect,
 ];
 for (const el of elements) {
@@ -76,8 +77,9 @@ function render(): void {
   headingEl!.textContent = robot ? robot.heading : "—";
   lastResultEl!.textContent = robot ? robot.lastResult : "—";
   sequenceEl!.textContent = robot ? String(robot.sequence) : "—";
+  motionStatusEl!.textContent = robot ? robot.motionStatus : "—";
 
-  const canCommand = state.ui === "READY";
+  const canCommand = state.ui === "READY" || state.ui === "BOUNDARY_FEEDBACK";
   for (const btn of [btnUp, btnDown, btnLeft, btnRight, btnReset]) {
     btn!.disabled = !canCommand;
   }
@@ -137,8 +139,12 @@ function syncPolling(): void {
 }
 
 async function onCommand(type: CommandType, direction?: Heading): Promise<void> {
-  if (state.ui !== "READY") {
+  if (state.ui !== "READY" && state.ui !== "BOUNDARY_FEEDBACK") {
     return;
+  }
+  if (feedbackTimer !== undefined) {
+    window.clearTimeout(feedbackTimer);
+    feedbackTimer = undefined;
   }
   dispatch({ type: "commandStart" });
   try {
