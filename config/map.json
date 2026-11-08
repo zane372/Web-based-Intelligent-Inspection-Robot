@@ -1,0 +1,10 @@
+{
+  "mapId": "grid-20x20",
+  "width": 20,
+  "height": 20,
+  "initialRobot": {
+    "x": 0,
+    "y": 0,
+    "heading": "RIGHT"
+  }
+}

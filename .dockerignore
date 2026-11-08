@@ -1,0 +1,49 @@
+# 版本控制与 CI
+.git
+.github
+.gitignore
+.dockerignore
+
+# 依赖与构建产物
+node_modules
+frontend/node_modules
+frontend/dist
+build
+backend/build
+*.o
+*.obj
+*.a
+*.so
+*.exe
+
+# Python 测试（不属于运行时，也非构建所需）
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+tests
+
+# 前端临时
+.vite
+*.local
+
+# 环境与密钥
+.env
+.env.*
+!.env.example
+
+# 文档与本地参考资料
+*.md
+docs
+_reference
+image attachment
+SPEC.md
+agent.md
+request.md
+
+# IDE
+.idea
+.vscode
+.DS_Store

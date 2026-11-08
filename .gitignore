@@ -1,0 +1,42 @@
+# 依赖目录
+node_modules/
+frontend/node_modules/
+
+# 构建产物
+dist/
+frontend/dist/
+build/
+backend/build/
+*.o
+*.obj
+*.a
+*.so
+*.exe
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# 前端
+.vite/
+*.local
+
+# 环境与密钥
+.env
+.env.*
+!.env.example
+
+# IDE / 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 本地参考资料（非交付物）
+_reference/
+image attachment/
