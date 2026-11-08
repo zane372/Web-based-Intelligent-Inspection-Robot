@@ -97,10 +97,9 @@ TEST(RobotControllerTest, ConcurrentExecuteKeepsSequenceAtomic) {
 RobotController makeSmallController() {
     Grid grid(3, 3);
     Robot robot(Position{0, 0}, Direction::Right);
-    RobotController controller(grid, robot, "robot-1", "inst-patrol");
-    // 调大间隔，避免后台线程干扰确定性驱动。
-    controller.setPatrolIntervalMs(600000);
-    return controller;
+    // 调大间隔，避免后台线程干扰确定性驱动；经构造函数传入以保持
+    // 返回值为纯右值（依赖 C++17 保证复制省略，避免拷贝构造）。
+    return RobotController(grid, robot, "robot-1", "inst-patrol", 600000);
 }
 
 // 启动巡检：patrolActive 置位、结果 PatrolStarted、序列号 +1。

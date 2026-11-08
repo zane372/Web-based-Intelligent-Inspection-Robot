@@ -23,13 +23,15 @@ CommandResult mapMoveResult(MoveResult mr) {
 }  // namespace
 
 RobotController::RobotController(Grid grid, Robot robot,
-                                 std::string robotId, std::string instanceId)
+                                 std::string robotId, std::string instanceId,
+                                 int patrolIntervalMs)
     : grid_(std::move(grid)),
       robot_(std::move(robot)),
       initialPosition_(robot_.position()),
       initialHeading_(robot_.heading()),
       robotId_(std::move(robotId)),
-      instanceId_(std::move(instanceId)) {}
+      instanceId_(std::move(instanceId)),
+      patrolIntervalMs_(patrolIntervalMs) {}
 
 RobotController::~RobotController() {
     stopPatrolAndJoin();
@@ -74,7 +76,9 @@ CommandOutcome RobotController::execute(CommandType type, Direction direction) {
                     if (patrolPath_.empty()) {
                         robot_.setMotionStatus(MotionStatus::Idle);
                         robot_.setLastResult(LastResult::PatrolCompleted);
-                        result = CommandResult::PatrolCompleted;
+                        // 无可遍历路径：命令仍受理（PATROL_STARTED），
+                        // 巡检状态由 lastResult=PATROL_COMPLETED 体现立即完成。
+                        result = CommandResult::PatrolStarted;
                         ++sequence_;
                     } else {
                         patrolIndex_ = 0;
@@ -146,11 +150,11 @@ bool RobotController::patrolStepLocked() {
     robot_.applyManualMove(dir, grid_);
     ++sequence_;
     if (patrolIndex_ >= patrolPath_.size()) {
+        // 最后一步执行完毕：标记完成，但仍返回 true 表示本步已推进。
         patrolActive_ = false;
         patrolCv_.notify_all();
         robot_.setMotionStatus(MotionStatus::Idle);
         robot_.setLastResult(LastResult::PatrolCompleted);
-        return false;
     }
     return true;
 }

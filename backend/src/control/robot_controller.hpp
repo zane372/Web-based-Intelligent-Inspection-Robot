@@ -60,9 +60,11 @@ struct CommandOutcome {
 class RobotController {
 public:
     // grid 为运行时只读地图；robot 由配置初始位姿构造；
-    // robotId/instanceId 为静态标识与进程级实例标识。
+    // robotId/instanceId 为静态标识与进程级实例标识；
+    // patrolIntervalMs 为巡检推进间隔（毫秒，默认 250，测试可调大）。
     RobotController(Grid grid, Robot robot,
-                    std::string robotId, std::string instanceId);
+                    std::string robotId, std::string instanceId,
+                    int patrolIntervalMs = 250);
 
     // 停止巡检线程并等待退出（若存在）。
     ~RobotController();

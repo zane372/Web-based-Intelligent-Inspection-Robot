@@ -16,6 +16,10 @@ struct Position {
     bool operator!=(const Position& other) const {
         return !(*this == other);
     }
+    // 字典序比较，供有序容器（std::set/std::map）使用。
+    bool operator<(const Position& other) const {
+        return x < other.x || (x == other.x && y < other.y);
+    }
 };
 
 // 机器人朝向：四个方向，对应方向键。
