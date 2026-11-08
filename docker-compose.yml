@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: patrol-sim-base:local
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8080"
+      MAP_CONFIG: /app/config/map.json
+      STATIC_ROOT: /app/web
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
