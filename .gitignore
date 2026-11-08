@@ -1,6 +1,7 @@
 # 依赖目录
 node_modules/
 frontend/node_modules/
+.npm-cache/
 
 # 构建产物
 dist/
