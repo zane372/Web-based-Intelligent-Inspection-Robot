@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -11,6 +12,23 @@
 
 #include "api/command_parser.hpp"
 #include "dto.hpp"
+
+// Crow 的默认路由只匹配 GET（routing.h 中 methods_ 初始化为 1<<Get）。
+// 这里显式列出全部 HTTP 方法，使每个路由能命中任意方法，
+// 再在 handler 内自行按方法返回 200 或 405（带 Allow 头）。
+#define CROW_METHODS_ALL \
+    crow::HTTPMethod::DELETE, crow::HTTPMethod::GET, crow::HTTPMethod::HEAD, \
+    crow::HTTPMethod::POST, crow::HTTPMethod::PUT, crow::HTTPMethod::CONNECT, \
+    crow::HTTPMethod::OPTIONS, crow::HTTPMethod::TRACE, crow::HTTPMethod::PATCH, \
+    crow::HTTPMethod::PURGE, crow::HTTPMethod::COPY, crow::HTTPMethod::LOCK, \
+    crow::HTTPMethod::MKCOL, crow::HTTPMethod::MOVE, crow::HTTPMethod::PROPFIND, \
+    crow::HTTPMethod::PROPPATCH, crow::HTTPMethod::SEARCH, crow::HTTPMethod::UNLOCK, \
+    crow::HTTPMethod::BIND, crow::HTTPMethod::REBIND, crow::HTTPMethod::UNBIND, \
+    crow::HTTPMethod::ACL, crow::HTTPMethod::REPORT, crow::HTTPMethod::MKACTIVITY, \
+    crow::HTTPMethod::CHECKOUT, crow::HTTPMethod::MERGE, crow::HTTPMethod::MSEARCH, \
+    crow::HTTPMethod::NOTIFY, crow::HTTPMethod::SUBSCRIBE, \
+    crow::HTTPMethod::UNSUBSCRIBE, crow::HTTPMethod::MKCALENDAR, \
+    crow::HTTPMethod::LINK, crow::HTTPMethod::UNLINK, crow::HTTPMethod::SOURCE
 
 namespace patrol {
 
@@ -204,6 +222,7 @@ void runHttpServer(const MapConfig& config,
 
     // ---- GET /api/v1/health ----
     CROW_ROUTE(app, "/api/v1/health")
+    .methods(CROW_METHODS_ALL)
     ([&controller, &config](const crow::request& req) {
         if (req.method != crow::HTTPMethod::GET &&
             req.method != crow::HTTPMethod::HEAD) {
@@ -221,6 +240,7 @@ void runHttpServer(const MapConfig& config,
 
     // ---- GET /api/v1/map ----
     CROW_ROUTE(app, "/api/v1/map")
+    .methods(CROW_METHODS_ALL)
     ([&config](const crow::request& req) {
         if (req.method != crow::HTTPMethod::GET &&
             req.method != crow::HTTPMethod::HEAD) {
@@ -238,6 +258,7 @@ void runHttpServer(const MapConfig& config,
 
     // ---- GET /api/v1/robot ----
     CROW_ROUTE(app, "/api/v1/robot")
+    .methods(CROW_METHODS_ALL)
     ([&controller](const crow::request& req) {
         if (req.method != crow::HTTPMethod::GET &&
             req.method != crow::HTTPMethod::HEAD) {
@@ -254,6 +275,7 @@ void runHttpServer(const MapConfig& config,
 
     // ---- POST /api/v1/robot/commands ----
     CROW_ROUTE(app, "/api/v1/robot/commands")
+    .methods(CROW_METHODS_ALL)
     ([&controller](const crow::request& req) {
         const std::string requestId = makeRequestId();
 
@@ -302,20 +324,29 @@ void runHttpServer(const MapConfig& config,
 
     // ---- 根路径 -> index.html ----
     CROW_ROUTE(app, "/")
-    ([&staticRoot]() {
+    .methods(CROW_METHODS_ALL)
+    ([&staticRoot](const crow::request& req) {
+        if (req.method != crow::HTTPMethod::GET &&
+            req.method != crow::HTTPMethod::HEAD) {
+            crow::response res(405, "method not allowed");
+            res.set_header("Allow", "GET, HEAD");
+            return res;
+        }
+        const bool head = (req.method == crow::HTTPMethod::HEAD);
         std::ifstream in(staticRoot + "/index.html", std::ios::binary);
         if (!in.is_open()) {
             return crow::response(404, "not found");
         }
         std::ostringstream buffer;
         buffer << in.rdbuf();
-        crow::response res(200, buffer.str());
+        crow::response res(200, head ? std::string{} : buffer.str());
         res.set_header("Content-Type", "text/html; charset=utf-8");
         return res;
     });
 
     // ---- 兜底路由：未知 API 路径与静态资源 ----
     CROW_ROUTE(app, "/<path>")
+    .methods(CROW_METHODS_ALL)
     ([&staticRoot](const crow::request& req, std::string path) {
         // /api/ 前缀：未知路由返回 JSON 404；已知路由但方法不符返回 405。
         if (path.rfind("api/", 0) == 0) {
