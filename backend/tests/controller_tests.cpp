@@ -178,5 +178,28 @@ TEST(RobotControllerTest, StartPatrolWhileActiveIsIdempotent) {
     EXPECT_EQ(outcome.robot.sequence, seqBefore);
 }
 
+// 巡检路径为空（起点被障碍物包围）时：命令受理、立即完成、不起线程。
+TEST(RobotControllerTest, StartPatrolEmptyPathCompletesImmediately) {
+    Grid grid(3, 3, {Position{1, 0}, Position{0, 1}});
+    Robot robot(Position{0, 0}, Direction::Right);
+    RobotController controller(grid, robot, "robot-1", "inst-patrol", 600000);
+    const CommandOutcome outcome =
+        controller.execute(CommandType::StartPatrol, Direction::Right);
+    EXPECT_EQ(outcome.result, CommandResult::PatrolStarted);
+    EXPECT_FALSE(outcome.robot.patrolActive);
+    EXPECT_EQ(outcome.robot.lastResult, LastResult::PatrolCompleted);
+    EXPECT_EQ(outcome.robot.sequence, 1);
+}
+
+// 未巡检时停止为幂等空操作：不改变状态与序列号。
+TEST(RobotControllerTest, StopPatrolWhenInactiveIsIdempotent) {
+    RobotController controller = makeSmallController();
+    const CommandOutcome outcome =
+        controller.execute(CommandType::StopPatrol, Direction::Right);
+    EXPECT_EQ(outcome.result, CommandResult::PatrolStopped);
+    EXPECT_FALSE(outcome.robot.patrolActive);
+    EXPECT_EQ(outcome.robot.sequence, 0);
+}
+
 }  // namespace
 }  // namespace patrol

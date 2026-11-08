@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -89,7 +90,7 @@ public:
 
     // 设置巡检推进间隔（毫秒），主要供测试将间隔调大以确定性驱动。
     void setPatrolIntervalMs(int milliseconds) {
-        patrolIntervalMs_ = std::chrono::milliseconds(milliseconds);
+        patrolIntervalMs_.store(std::chrono::milliseconds(milliseconds));
     }
 
 private:
@@ -108,7 +109,8 @@ private:
     std::vector<Direction> patrolPath_;
     std::size_t patrolIndex_{0};
     std::thread patrolThread_;
-    std::chrono::milliseconds patrolIntervalMs_{250};
+    std::atomic<std::chrono::milliseconds> patrolIntervalMs_{
+        std::chrono::milliseconds(250)};
 
     RobotSnapshot buildSnapshotLocked() const;
 

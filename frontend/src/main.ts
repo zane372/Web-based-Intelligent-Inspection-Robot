@@ -53,7 +53,8 @@ function dispatch(event: AppEvent): void {
 }
 
 function statusText(s: AppState): string {
-  if (s.robot?.patrolActive) {
+  // 巡检提示只在连接可用时显示，避免掩盖断线/降级等更高优先级状态。
+  if ((s.ui === "READY" || s.ui === "EXECUTING") && s.robot?.patrolActive) {
     return "自动巡检中…";
   }
   switch (s.ui) {
