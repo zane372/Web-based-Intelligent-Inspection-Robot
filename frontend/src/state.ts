@@ -92,7 +92,9 @@ export function reduce(state: AppState, event: AppEvent): AppState {
         return { ...state, ui: "READY" };
       }
       const ui: UiState =
-        event.result === "BLOCKED_BOUNDARY" ? "BOUNDARY_FEEDBACK" : "READY";
+        event.result === "BLOCKED_BOUNDARY" || event.result === "BLOCKED_OBSTACLE"
+          ? "BOUNDARY_FEEDBACK"
+          : "READY";
       return { ...state, ui, robot: event.robot, pollFailures: 0 };
     }
 

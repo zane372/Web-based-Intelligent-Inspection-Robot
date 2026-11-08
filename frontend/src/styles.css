@@ -162,12 +162,26 @@ button:disabled {
   border-color: #2563eb;
 }
 
+#btn-patrol {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 14px;
+  background: #16a34a;
+  color: #ffffff;
+  border-color: #16a34a;
+}
+
 button:not(:disabled):hover {
   background: #f1f5f9;
 }
 
 #btn-reconnect:not(:disabled):hover {
   background: #1d4ed8;
+}
+
+#btn-patrol:not(:disabled):hover {
+  background: #15803d;
 }
 
 /* 使用帮助区。 */

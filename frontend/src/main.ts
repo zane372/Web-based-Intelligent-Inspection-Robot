@@ -25,11 +25,12 @@ const btnLeft = document.querySelector<HTMLButtonElement>("#btn-left");
 const btnRight = document.querySelector<HTMLButtonElement>("#btn-right");
 const btnReset = document.querySelector<HTMLButtonElement>("#btn-reset");
 const btnReconnect = document.querySelector<HTMLButtonElement>("#btn-reconnect");
+const btnPatrol = document.querySelector<HTMLButtonElement>("#btn-patrol");
 
 // DOM 元素在 index.html 中静态声明；若缺失属配置错误，立即暴露。
 const elements = [
   canvas, statusEl, positionEl, headingEl, lastResultEl, sequenceEl, motionStatusEl,
-  btnUp, btnDown, btnLeft, btnRight, btnReset, btnReconnect,
+  btnUp, btnDown, btnLeft, btnRight, btnReset, btnReconnect, btnPatrol,
 ];
 for (const el of elements) {
   if (!el) {
@@ -52,6 +53,9 @@ function dispatch(event: AppEvent): void {
 }
 
 function statusText(s: AppState): string {
+  if (s.robot?.patrolActive) {
+    return "自动巡检中…";
+  }
   switch (s.ui) {
     case "LOADING":
       return "加载中…";
@@ -60,7 +64,9 @@ function statusText(s: AppState): string {
     case "EXECUTING":
       return "执行中…";
     case "BOUNDARY_FEEDBACK":
-      return "已到达边界，无法继续前进";
+      return s.robot?.lastResult === "BLOCKED_OBSTACLE"
+        ? "前方有障碍物，无法前进"
+        : "已到达边界，无法继续前进";
     case "DEGRADED":
       return "连接不稳定，正在重试…";
     case "DISCONNECTED":
@@ -80,9 +86,10 @@ function render(): void {
   motionStatusEl!.textContent = robot ? robot.motionStatus : "—";
 
   const canCommand = state.ui === "READY" || state.ui === "BOUNDARY_FEEDBACK";
-  for (const btn of [btnUp, btnDown, btnLeft, btnRight, btnReset]) {
+  for (const btn of [btnUp, btnDown, btnLeft, btnRight, btnReset, btnPatrol]) {
     btn!.disabled = !canCommand;
   }
+  btnPatrol!.textContent = state.robot?.patrolActive ? "停止巡检" : "自动巡检";
   btnReconnect!.hidden = state.ui !== "DISCONNECTED";
 
   if (state.map) {
@@ -150,7 +157,7 @@ async function onCommand(type: CommandType, direction?: Heading): Promise<void> 
   try {
     const resp = await sendCommand(type, direction);
     dispatch({ type: "commandDone", robot: resp.robot, result: resp.result });
-    if (resp.result === "BLOCKED_BOUNDARY") {
+    if (resp.result === "BLOCKED_BOUNDARY" || resp.result === "BLOCKED_OBSTACLE") {
       if (feedbackTimer !== undefined) {
         window.clearTimeout(feedbackTimer);
       }
@@ -175,6 +182,9 @@ btnLeft!.addEventListener("click", () => void onCommand("MOVE", "LEFT"));
 btnRight!.addEventListener("click", () => void onCommand("MOVE", "RIGHT"));
 btnReset!.addEventListener("click", () => void onCommand("RESET"));
 btnReconnect!.addEventListener("click", () => void loadAll());
+btnPatrol!.addEventListener("click", () => {
+  void onCommand(state.robot?.patrolActive ? "STOP_PATROL" : "START_PATROL");
+});
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {

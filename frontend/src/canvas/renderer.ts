@@ -116,6 +116,12 @@ export function draw(
     ctx.stroke();
   }
 
+  // 障碍物：深色实心格，机器人无法进入。
+  ctx.fillStyle = "#475569";
+  for (const o of map.obstacles) {
+    ctx.fillRect(o.x * cellSize, o.y * cellSize, cellSize, cellSize);
+  }
+
   // 外边界（比网格线更粗）。
   ctx.strokeStyle = "#334155";
   ctx.lineWidth = 3;

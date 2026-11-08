@@ -11,6 +11,7 @@ function robot(overrides: Partial<RobotState> = {}): RobotState {
     motionStatus: "IDLE",
     lastResult: "NONE",
     sequence: 0,
+    patrolActive: false,
     ...overrides,
   };
 }
@@ -22,6 +23,7 @@ const map: MapInfo = {
   origin: "TOP_LEFT",
   xAxis: "RIGHT",
   yAxis: "DOWN",
+  obstacles: [],
 };
 
 describe("state reducer", () => {
@@ -109,6 +111,19 @@ describe("state reducer", () => {
     });
     expect(s2.ui).toBe("READY");
     expect(s2.robot?.position).toEqual({ x: 1, y: 0 });
+  });
+
+  it("命令被障碍阻挡进入 BOUNDARY_FEEDBACK", () => {
+    let s = reduce(createInitialState(), { type: "loaded", map, robot: robot() });
+    s = reduce(s, { type: "commandStart" });
+    s = reduce(s, {
+      type: "commandDone",
+      robot: robot({ sequence: 1, motionStatus: "BLOCKED", lastResult: "BLOCKED_OBSTACLE" }),
+      result: "BLOCKED_OBSTACLE",
+    });
+    expect(s.ui).toBe("BOUNDARY_FEEDBACK");
+    s = reduce(s, { type: "feedbackTimeout" });
+    expect(s.ui).toBe("READY");
   });
 
   it("EXECUTING 期间轮询只更新数据不改变状态", () => {

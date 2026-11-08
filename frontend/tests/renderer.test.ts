@@ -9,6 +9,7 @@ const map: MapInfo = {
   origin: "TOP_LEFT",
   xAxis: "RIGHT",
   yAxis: "DOWN",
+  obstacles: [],
 };
 
 const robot: RobotState = {
@@ -19,6 +20,7 @@ const robot: RobotState = {
   motionStatus: "IDLE",
   lastResult: "MOVED",
   sequence: 1,
+  patrolActive: false,
 };
 
 function mockCtx(): CanvasRenderingContext2D {
@@ -57,5 +59,13 @@ describe("draw", () => {
 
   it("机器人不存在时仅绘制网格不抛异常", () => {
     expect(() => draw(mockCtx(), map, null, 32)).not.toThrow();
+  });
+
+  it("含障碍物时绘制不抛异常", () => {
+    const obstacleMap: MapInfo = {
+      ...map,
+      obstacles: [{ x: 4, y: 4 }, { x: 5, y: 4 }],
+    };
+    expect(() => draw(mockCtx(), obstacleMap, robot, 32)).not.toThrow();
   });
 });

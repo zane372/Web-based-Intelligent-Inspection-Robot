@@ -77,6 +77,25 @@ describe("API client", () => {
     expect(JSON.parse(init.body as string)).toEqual({ type: "RESET" });
   });
 
+  it("START_PATROL 命令不带 direction", async () => {
+    const mock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          commandId: "cmd-00000001",
+          type: "START_PATROL",
+          result: "PATROL_STARTED",
+          robot: robotJson,
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    await sendCommand("START_PATROL");
+    const [, init] = mock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ type: "START_PATROL" });
+  });
+
   it("后端错误时抛出 ApiError 并携带错误码", async () => {
     const mock = vi.fn().mockResolvedValue(
       new Response(

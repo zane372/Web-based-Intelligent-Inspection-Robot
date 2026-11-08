@@ -29,12 +29,15 @@
         </div>
         <button id="btn-down" class="dir-btn" aria-label="向下移动">↓</button>
       </div>
+      <button id="btn-patrol" aria-label="自动巡检">自动巡检</button>
       <button id="btn-reconnect" hidden>重新连接</button>
       <section id="help" aria-label="使用帮助">
         <h2>使用帮助</h2>
         <ul>
           <li>每次移动一格。</li>
           <li>越界不会离开地图，机器人停在原地。</li>
+          <li>深色格子为障碍物，机器人无法进入。</li>
+          <li>「自动巡检」可让机器人自动遍历地图。</li>
           <li>坐标原点位于左上角。</li>
         </ul>
       </section>
