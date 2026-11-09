@@ -122,6 +122,10 @@ bool hazardTypeFromString(const std::string& s, HazardType& out) {
         out = HazardType::GasLeak;
         return true;
     }
+    if (s == "OIL_LEAK") {
+        out = HazardType::OilLeak;
+        return true;
+    }
     return false;
 }
 
@@ -264,7 +268,7 @@ PerceptionConfig loadPerceptionConfig(const std::string& path,
         }
         HazardType type{};
         if (!hazardTypeFromString(h["type"].get<std::string>(), type)) {
-            throw std::runtime_error("hazards 元素 type 非法（SMOKE/HIGH_TEMP/GAS_LEAK）");
+            throw std::runtime_error("hazards 元素 type 非法（SMOKE/HIGH_TEMP/GAS_LEAK/OIL_LEAK）");
         }
         if (!h.contains("severity") || !h["severity"].is_string()) {
             throw std::runtime_error("hazards 元素 severity 必须是字符串");

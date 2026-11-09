@@ -18,7 +18,7 @@ enum class HitType { None, Boundary, Obstacle };
 enum class RelativeDirection { Front, Left, Right };
 
 // 虚拟异常源类型。
-enum class HazardType { Smoke, HighTemp, GasLeak };
+enum class HazardType { Smoke, HighTemp, GasLeak, OilLeak };
 
 // 异常严重程度。
 enum class Severity { Low, Medium, High };

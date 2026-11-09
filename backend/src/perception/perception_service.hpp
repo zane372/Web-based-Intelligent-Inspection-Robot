@@ -3,8 +3,10 @@
 // 虚拟感知服务（SPEC 6.5 / 6.6）：观察去重、活动检测、事件环形缓冲。
 // 只依赖 domain 与纯规则，不依赖 Crow / nlohmann/json / Boost。
 
+#include <cstdint>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -36,10 +38,11 @@ struct PerceptionEventsView {
 class PerceptionService {
 public:
     PerceptionService(PerceptionConfig config, std::string instanceId,
-                      Grid grid);
+                      Grid grid, std::uint32_t rngSeed = 0);
 
     // 观察一次机器人状态（SPEC 6.5）。线程安全；按 (instanceId, sequence)
-    // 去重，忽略同实例下更旧的快照。lastResult 用于生成接触事件。
+    // 去重，忽略同实例下更旧的快照。lastResult 用于生成接触事件；
+    // lastResult == Reset 时重新随机化异常源位置（SPEC 6.4 扩展）。
     void observe(const std::string& instanceId, int sequence, Position position,
                  Direction heading, LastResult lastResult);
 
@@ -47,6 +50,9 @@ public:
     PerceptionEventsView events(int after, int limit) const;
 
     bool enabled() const { return config_.enabled; }
+
+    // 当前异常源真值位置（仅测试/诊断读取；对外 API 不暴露真值）。
+    std::vector<Position> hazardPositions() const;
 
 private:
     static constexpr std::size_t kEventBufferCapacity = 200;
@@ -56,9 +62,13 @@ private:
                            const std::optional<Detection>& hazard,
                            const std::optional<LastResult>& contact);
 
+    // RESET 后重新随机化 config_.hazards 的位置（须持有 mutex_）。
+    void randomizeHazardsLocked();
+
     PerceptionConfig config_;
     std::string instanceId_;
     Grid grid_;
+    std::mt19937 rng_;
 
     mutable std::mutex mutex_;
     std::optional<PerceptionObservation> latest_;

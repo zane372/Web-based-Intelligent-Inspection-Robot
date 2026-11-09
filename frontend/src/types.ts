@@ -57,7 +57,7 @@ export interface CommandResponse {
 // ---- 虚拟感知（SPEC 6）----
 export type HitType = "NONE" | "BOUNDARY" | "OBSTACLE";
 export type RelativeDirection = "FRONT" | "LEFT" | "RIGHT";
-export type HazardType = "SMOKE" | "HIGH_TEMP" | "GAS_LEAK";
+export type HazardType = "SMOKE" | "HIGH_TEMP" | "GAS_LEAK" | "OIL_LEAK";
 export type Severity = "LOW" | "MEDIUM" | "HIGH";
 export type PerceptionEventType =
   | "ANOMALY_DETECTED"

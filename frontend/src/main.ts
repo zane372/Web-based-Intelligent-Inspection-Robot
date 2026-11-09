@@ -210,6 +210,8 @@ function hazardTypeText(t: Detection["hazardType"]): string {
       return "高温";
     case "GAS_LEAK":
       return "气体泄漏";
+    case "OIL_LEAK":
+      return "油污泄漏";
   }
 }
 

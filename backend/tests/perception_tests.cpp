@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <random>
+#include <set>
+
 #include "domain/grid.hpp"
 #include "perception/perception_rules.hpp"
 #include "perception/perception_service.hpp"
@@ -295,6 +298,92 @@ TEST(PerceptionService, InstanceChangeResetsState) {
     ASSERT_EQ(ev.events.size(), 1u);
     EXPECT_EQ(ev.events[0].eventId, 1);
     EXPECT_EQ(ev.events[0].instanceId, "inst-2");
+}
+
+// ---------- RESET 随机化异常源位置（新增） ----------
+
+TEST(PerceptionRules, SampleHazardPositionsWalkableAndDistinct) {
+    // 随机化真值：抽取的位置均在界内可通行、互不重复、数量与异常源一致。
+    Grid grid(5, 5, {Position{2, 2}});  // 1 个障碍 → 24 个可通行格
+    std::vector<Hazard> hazards;
+    for (const char* id : {"a", "b", "c"}) {
+        hazards.push_back(makeHazard(id, Position{0, 0}));
+    }
+    std::mt19937 rng(20241110u);
+    const auto positions = sampleHazardPositions(hazards, grid, rng);
+    ASSERT_EQ(positions.size(), hazards.size());
+    const std::set<Position> unique(positions.begin(), positions.end());
+    EXPECT_EQ(unique.size(), positions.size());  // 互不重复
+    for (const Position& p : positions) {
+        EXPECT_TRUE(grid.isWalkable(p));
+        EXPECT_FALSE(grid.isObstacle(p));
+    }
+}
+
+TEST(PerceptionRules, SampleHazardPositionsEmptyWhenFewerWalkable) {
+    // 可通行格少于异常源数量时无法保证互不重复，返回空向量由调用方保持原位。
+    Grid grid(2, 1);  // 仅 (0,0)、(1,0) 可通行
+    std::vector<Hazard> hazards;
+    for (const char* id : {"a", "b", "c"}) {
+        hazards.push_back(makeHazard(id, Position{0, 0}));
+    }
+    std::mt19937 rng(7u);
+    const auto positions = sampleHazardPositions(hazards, grid, rng);
+    EXPECT_TRUE(positions.empty());
+}
+
+TEST(PerceptionService, ResetMovesHazardToWalkableCell) {
+    // 绕过配置校验直接把异常源放在障碍格，确定性证明 RESET 后位置被重新
+    // 随机到可通行格（即位置确实改变，且始终落在可通行格内）。
+    Grid grid(5, 5, {Position{2, 2}});
+    auto config = makeConfig(3, 2, {makeHazard("h1", Position{2, 2})});
+    PerceptionService svc(config, "inst-1", grid, /*rngSeed=*/12345u);
+
+    ASSERT_EQ(svc.hazardPositions().size(), 1u);
+    EXPECT_EQ(svc.hazardPositions()[0], Position(2, 2));  // 初始位于障碍格
+
+    svc.observe("inst-1", 1, Position{0, 0}, Direction::Right,
+                LastResult::Reset);
+
+    const auto positions = svc.hazardPositions();
+    ASSERT_EQ(positions.size(), 1u);
+    EXPECT_TRUE(grid.isWalkable(positions[0]));
+    EXPECT_FALSE(grid.isObstacle(positions[0]));
+}
+
+TEST(PerceptionService, NonResetKeepsHazardPosition) {
+    // MOVE/None 不触发随机化：异常源位置保持配置值不变。
+    auto config = makeConfig(3, 2, {makeHazard("h1", Position{5, 0})});
+    PerceptionService svc(config, "inst-1", Grid(10, 10), /*rngSeed=*/12345u);
+
+    svc.observe("inst-1", 0, Position{0, 0}, Direction::Right,
+                LastResult::None);
+    svc.observe("inst-1", 1, Position{1, 0}, Direction::Right,
+                LastResult::Moved);
+
+    ASSERT_EQ(svc.hazardPositions().size(), 1u);
+    EXPECT_EQ(svc.hazardPositions()[0], Position(5, 0));
+}
+
+TEST(PerceptionService, ResetRandomizesMultipleHazardsDistinct) {
+    // 多个异常源 RESET 后互不重复且均在界内可通行。
+    Grid grid(10, 10);
+    auto config = makeConfig(
+        3, 2,
+        {makeHazard("a", Position{1, 1}), makeHazard("b", Position{8, 8}),
+         makeHazard("c", Position{1, 8})});
+    PerceptionService svc(config, "inst-1", grid, /*rngSeed=*/999u);
+
+    svc.observe("inst-1", 1, Position{0, 0}, Direction::Right,
+                LastResult::Reset);
+
+    const auto positions = svc.hazardPositions();
+    ASSERT_EQ(positions.size(), 3u);
+    const std::set<Position> unique(positions.begin(), positions.end());
+    EXPECT_EQ(unique.size(), 3u);  // 互不重复
+    for (const Position& p : positions) {
+        EXPECT_TRUE(grid.isWalkable(p));
+    }
 }
 
 }  // namespace
