@@ -116,9 +116,9 @@ describe("perception reducer", () => {
     });
     s = reducePerception(s, {
       type: "eventsLoaded",
-      data: { events: [event(1)], latestEventId: 5, truncated: false },
+      data: { events: [event(1)], latestEventId: 5, hasMore: false, truncated: false },
     });
-    expect(s.after).toBe(5);
+    expect(s.after).toBe(1);
     s = reducePerception(s, {
       type: "pollOk",
       data: latest({ instanceId: "i2", latestEventId: 0 }),
@@ -136,11 +136,11 @@ describe("perception reducer", () => {
     });
     s = reducePerception(s, {
       type: "eventsLoaded",
-      data: { events: [event(1), event(2)], latestEventId: 2, truncated: false },
+      data: { events: [event(1), event(2)], latestEventId: 2, hasMore: false, truncated: false },
     });
     s = reducePerception(s, {
       type: "eventsLoaded",
-      data: { events: [event(2), event(3)], latestEventId: 3, truncated: false },
+      data: { events: [event(2), event(3)], latestEventId: 3, hasMore: false, truncated: false },
     });
     expect(s.events.map((e) => e.eventId)).toEqual([1, 2, 3]);
     expect(s.after).toBe(3);
@@ -153,11 +153,11 @@ describe("perception reducer", () => {
     });
     s = reducePerception(s, {
       type: "eventsLoaded",
-      data: { events: [event(1)], latestEventId: 10, truncated: false },
+      data: { events: [event(1)], latestEventId: 10, hasMore: false, truncated: false },
     });
     s = reducePerception(s, {
       type: "eventsLoaded",
-      data: { events: [], latestEventId: 20, truncated: true },
+      data: { events: [], latestEventId: 20, hasMore: false, truncated: true },
     });
     expect(s.events).toHaveLength(0);
     expect(s.after).toBe(0);
@@ -172,7 +172,7 @@ describe("perception reducer", () => {
     const many = Array.from({ length: MAX_EVENTS + 10 }, (_, i) => event(i + 1));
     s = reducePerception(s, {
       type: "eventsLoaded",
-      data: { events: many, latestEventId: MAX_EVENTS + 10, truncated: false },
+      data: { events: many, latestEventId: MAX_EVENTS + 10, hasMore: false, truncated: false },
     });
     expect(s.events).toHaveLength(MAX_EVENTS);
     expect(s.events[0].eventId).toBe(11);
@@ -202,5 +202,48 @@ describe("perception reducer", () => {
     s = reducePerception(s, { type: "pollOk", data: latest() });
     expect(s.ui).toBe("READY");
     expect(s.pollFailures).toBe(0);
+  });
+
+  it("LOADING 时 pollOk 进入 READY（审查 C1）", () => {
+    const s = reducePerception(createInitialPerceptionState(), {
+      type: "pollOk",
+      data: latest({ activeDetections: [detection("h1")] }),
+    });
+    expect(s.ui).toBe("READY");
+    expect(s.activeDetections).toHaveLength(1);
+    expect(s.discovered.map((x) => x.hazardId)).toEqual(["h1"]);
+  });
+
+  it("DEGRADED 时 pollOk 恢复 READY（审查 C1）", () => {
+    let s = reducePerception(createInitialPerceptionState(), {
+      type: "ready",
+      data: latest(),
+    });
+    s = reducePerception(s, { type: "pollFail" });
+    expect(s.ui).toBe("DEGRADED");
+    s = reducePerception(s, { type: "pollOk", data: latest() });
+    expect(s.ui).toBe("READY");
+    expect(s.pollFailures).toBe(0);
+  });
+
+  it("eventsLoaded 游标取返回事件最大 eventId 而非全局 latestEventId（审查 I1）", () => {
+    let s = reducePerception(createInitialPerceptionState(), {
+      type: "ready",
+      data: latest({ latestEventId: 100 }),
+    });
+    // 后端返回了 [101..150] 的一页，但 latestEventId 已经到 200：
+    // after 应推进到本页最大 eventId=150，而不是 200，否则 151..200 会被永久跳过。
+    s = reducePerception(s, {
+      type: "eventsLoaded",
+      data: {
+        events: [event(101), event(150)],
+        latestEventId: 200,
+        hasMore: true,
+        truncated: false,
+      },
+    });
+    expect(s.after).toBe(150);
+    expect(s.hasMore).toBe(true);
+    expect(s.latestEventId).toBe(200);
   });
 });

@@ -11,6 +11,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "crow.h"
 
@@ -114,6 +115,12 @@ bool parseStrictInt(const std::string& s, int& out) {
     if (s.empty()) {
         return false;
     }
+    // 严格纯数字：拒绝前导空白与正负号（strtol 会接受 +5/前导空白，审查 M1）。
+    for (char c : s) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
     errno = 0;
     char* end = nullptr;
     const long value = std::strtol(s.c_str(), &end, 10);
@@ -124,6 +131,36 @@ bool parseStrictInt(const std::string& s, int& out) {
         return false;
     }
     out = static_cast<int>(value);
+    return true;
+}
+
+// 校验感知事件查询串：仅允许 after/limit 键且不得重复（SPEC 6.7，审查 M1）。
+// 合法返回 true；非法将未知/重复字段名写入 badField。
+bool validatePerceptionEventsQuery(const crow::request& req,
+                                   std::string& badField) {
+    // Crow 的 keys() 返回所有键（含重复，不含 '=' 及之后的值），
+    // 据此校验：仅允许 after/limit 且各最多出现一次（审查 M1）。
+    const std::vector<std::string> keys = req.url_params.keys();
+    int afterCount = 0;
+    int limitCount = 0;
+    for (const std::string& key : keys) {
+        if (key == "after") {
+            ++afterCount;
+        } else if (key == "limit") {
+            ++limitCount;
+        } else {
+            badField = key;
+            return false;
+        }
+    }
+    if (afterCount > 1) {
+        badField = "after";
+        return false;
+    }
+    if (limitCount > 1) {
+        badField = "limit";
+        return false;
+    }
     return true;
 }
 
@@ -316,6 +353,12 @@ void runHttpServer(const MapConfig& config,
         // 查询参数显式校验（SPEC 6.7：after≥0 默认0，limit 1..100 默认50）。
         int after = 0;
         int limit = 50;
+        std::string badField;
+        if (!validatePerceptionEventsQuery(req, badField)) {
+            return jsonError(400, "INVALID_QUERY_PARAMETER",
+                             "查询参数非法（重复或未知字段）", requestId,
+                             {{"field", badField}});
+        }
         if (const char* afterParam = req.url_params.get("after")) {
             if (!parseStrictInt(afterParam, after) || after < 0) {
                 return jsonError(400, "INVALID_QUERY_PARAMETER",

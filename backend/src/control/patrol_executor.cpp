@@ -53,6 +53,7 @@ bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
                                    Robot& robot, const Grid& grid,
                                    int& sequence) {
     if (!active_) {
+        stepSnapshot_ = buildSnapshotLocked(robot, sequence);
         return false;
     }
     if (patrolIndex_ >= patrolPath_.size()) {
@@ -60,6 +61,7 @@ bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
         cv_.notify_all();
         robot.setMotionStatus(MotionStatus::Idle);
         robot.setLastResult(LastResult::PatrolCompleted);
+        stepSnapshot_ = buildSnapshotLocked(robot, sequence);
         return false;
     }
     const Direction dir = patrolPath_[patrolIndex_];
@@ -75,6 +77,9 @@ bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
                                 ? LastResult::BlockedObstacle
                                 : LastResult::BlockedBoundary);
         ++sequence;
+        // 受阻快照在解锁前捕获：确保该序列的观察（CONTACT 事件）不被
+        // 并发命令「偷走」序列号（审查 I2）。
+        stepSnapshot_ = buildSnapshotLocked(robot, sequence);
         // 全图规划为 O(N²) 且伴随堆分配，移出临界区执行（AR-CON-002/003）。
         const Position from = robot.position();
         lock.unlock();
@@ -90,7 +95,8 @@ bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
         patrolPath_ = std::move(path);
         patrolIndex_ = 0;
         if (patrolPath_.empty()) {
-            // 无可遍历路径：视为巡检完成。
+            // 无可遍历路径：视为巡检完成。保持受阻快照（CONTACT 事件），
+            // 完成态由 /api/v1/robot 的 lastResult=PATROL_COMPLETED 反映。
             active_ = false;
             cv_.notify_all();
             robot.setMotionStatus(MotionStatus::Idle);
@@ -109,6 +115,7 @@ bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
         robot.setMotionStatus(MotionStatus::Idle);
         robot.setLastResult(LastResult::PatrolCompleted);
     }
+    stepSnapshot_ = buildSnapshotLocked(robot, sequence);
     return true;
 }
 
@@ -122,8 +129,8 @@ void PatrolExecutor::loop(std::mutex& mutex, Robot& robot, const Grid& grid,
         }
         // stepReplanned 以锁被持有的状态进入，内部仅在规划时短暂释放锁。
         const bool keepGoing = stepReplanned(lock, robot, grid, sequence);
-        // 在锁内捕获已确认快照，再于锁外通知（AR-CON-006/007）。
-        const RobotSnapshot snap = buildSnapshotLocked(robot, sequence);
+        // stepReplanned 已在锁内捕获已确认快照；于锁外通知（AR-CON-006/007）。
+        const RobotSnapshot snap = stepSnapshot_;
         lock.unlock();
         if (onStep_) {
             onStep_(snap);

@@ -228,9 +228,8 @@ inline nlohmann::json perceptionEventToJson(const PerceptionEvent& e) {
         {"sequence", e.sequence},
         {"type", perceptionEventTypeToString(e.type)},
         {"position", positionToJson(e.position)},
-        {"hazard", nullptr},
-        {"contactResult", nullptr},
     };
+    // 不适用字段省略而非输出 null（SPEC 6.7，审查 M3）。
     if (e.hazard.has_value()) {
         j["hazard"] = detectionToJson(*e.hazard);
     }

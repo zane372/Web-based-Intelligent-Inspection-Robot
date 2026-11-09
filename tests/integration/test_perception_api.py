@@ -97,6 +97,33 @@ def test_perception_invalid_limit(client, base_url):
         assert err["details"]["field"] == "limit"
 
 
+def test_perception_rejects_unknown_and_duplicate_params(client, base_url):
+    # 未知字段（审查 M1）。
+    resp = client.get(
+        f"{base_url}/api/v1/perception/events?foo=1", timeout=2
+    )
+    assert resp.status_code == 400
+    err = resp.json()["error"]
+    assert err["code"] == "INVALID_QUERY_PARAMETER"
+    assert err["details"]["field"] == "foo"
+    # 重复字段。
+    resp = client.get(
+        f"{base_url}/api/v1/perception/events?after=1&after=2", timeout=2
+    )
+    assert resp.status_code == 400
+    err = resp.json()["error"]
+    assert err["code"] == "INVALID_QUERY_PARAMETER"
+    assert err["details"]["field"] == "after"
+    # 前导正号（parseStrictInt 拒绝）。
+    resp = client.get(
+        f"{base_url}/api/v1/perception/events?after=%2B5", timeout=2
+    )
+    assert resp.status_code == 400
+    err = resp.json()["error"]
+    assert err["code"] == "INVALID_QUERY_PARAMETER"
+    assert err["details"]["field"] == "after"
+
+
 # ---- 异常检测与接触事件 ----
 
 def test_perception_anomaly_detection(client, base_url):

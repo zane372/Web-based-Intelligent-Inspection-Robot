@@ -69,6 +69,11 @@ public:
     // 在控制器锁外调用（AR-CON-006/007）。
     void setOnStep(std::function<void(const RobotSnapshot&)> callback);
 
+    // 最近一次推进的已确认快照（stepReplanned 在锁内捕获）。
+    // 供 loop 与 RobotController::patrolStep 在锁内读取，再于锁外通知。
+    // 受阻快照在解锁重规划前捕获，确保该序列的观察不被并发命令覆盖。
+    RobotSnapshot stepSnapshot() const { return stepSnapshot_; }
+
 private:
     void loop(std::mutex& mutex, Robot& robot, const Grid& grid, int& sequence);
 
@@ -85,6 +90,7 @@ private:
     std::string robotId_;
     std::string instanceId_;
     std::function<void(const RobotSnapshot&)> onStep_;
+    RobotSnapshot stepSnapshot_{};
 };
 
 }  // namespace patrol

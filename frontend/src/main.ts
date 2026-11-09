@@ -393,18 +393,26 @@ async function pollPerceptionEvents(): Promise<void> {
   }
   perceptionEventsInFlight = true;
   try {
-    const data = await fetchPerceptionEvents(
-      perceptionState.after,
-      EVENTS_LIMIT,
-    );
-    dispatchPerception({
-      type: "eventsLoaded",
-      data: {
-        events: data.events,
-        latestEventId: data.latestEventId,
-        truncated: data.truncated,
-      },
-    });
+    // 增量分页拉取：after 游标随 reducer 推进，最多连续拉 10 页，
+    // 避免事件积压时无限循环（审查 I1）。
+    for (let page = 0; page < 10; page++) {
+      const data = await fetchPerceptionEvents(
+        perceptionState.after,
+        EVENTS_LIMIT,
+      );
+      dispatchPerception({
+        type: "eventsLoaded",
+        data: {
+          events: data.events,
+          latestEventId: data.latestEventId,
+          hasMore: data.hasMore,
+          truncated: data.truncated,
+        },
+      });
+      if (!data.hasMore || data.truncated) {
+        break;
+      }
+    }
   } catch {
     // 事件拉取失败不单独降级：latest 仍成功即保持 READY，下轮重试。
   } finally {

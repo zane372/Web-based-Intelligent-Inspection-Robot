@@ -159,6 +159,28 @@ bool hasUnknownKey(const nlohmann::json& obj,
     return false;
 }
 
+// 统计 UTF-8 字符串的 Unicode 码点数（SPEC 6.2 label 长度按字符而非字节）。
+// 非法续字节按单字节计，避免死循环。
+std::size_t utf8CodePointCount(const std::string& s) {
+    std::size_t count = 0;
+    for (std::size_t i = 0; i < s.size();) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c < 0x80) {
+            i += 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            i += 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            i += 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            i += 4;
+        } else {
+            i += 1;
+        }
+        ++count;
+    }
+    return count;
+}
+
 }  // namespace
 
 PerceptionConfig loadPerceptionConfig(const std::string& path,
@@ -277,7 +299,7 @@ PerceptionConfig loadPerceptionConfig(const std::string& path,
             if (label.empty()) {
                 throw std::runtime_error("hazards 元素 label 不能为空字符串");
             }
-            if (label.size() > 80) {
+            if (utf8CodePointCount(label) > 80) {
                 throw std::runtime_error("hazards 元素 label 长度不能超过 80");
             }
         }

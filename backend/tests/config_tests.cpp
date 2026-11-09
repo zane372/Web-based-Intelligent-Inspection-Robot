@@ -159,5 +159,41 @@ TEST(PerceptionConfig, RejectsOversizedLabel) {
     std::remove(path.c_str());
 }
 
+TEST(PerceptionConfig, AcceptsUnicodeLabelWithin80Codepoints) {
+    // 80 个汉字 = 80 码点但 240 字节。审查 M2 要求按 Unicode 码点计长，
+    // 故 80 汉字应通过（字节计长会误拒）。
+    const std::string smoke = "\xE7\x83\x9F";  // "烟" UTF-8 三字节
+    std::string label;
+    for (int i = 0; i < 80; ++i) {
+        label += smoke;
+    }
+    const std::string path = writeTempJson(
+        "cnlabel80",
+        std::string(R"({"version":1,"enabled":true,"rangeCells":3,
+            "hazardRangeCells":2,"hazards":[{"id":"h1","type":"SMOKE",
+            "severity":"HIGH","position":{"x":1,"y":1},"label":")") +
+            label + R"("}]})");
+    const auto cfg = loadPerceptionConfig(path, makeMap());
+    ASSERT_EQ(cfg.hazards.size(), 1u);
+    EXPECT_EQ(cfg.hazards[0].label.size(), 240u);  // 80 × 3 字节
+    std::remove(path.c_str());
+}
+
+TEST(PerceptionConfig, RejectsUnicodeLabelOver80Codepoints) {
+    const std::string smoke = "\xE7\x83\x9F";  // "烟"
+    std::string label;
+    for (int i = 0; i < 81; ++i) {
+        label += smoke;
+    }
+    const std::string path = writeTempJson(
+        "cnlabel81",
+        std::string(R"({"version":1,"enabled":true,"rangeCells":3,
+            "hazardRangeCells":2,"hazards":[{"id":"h1","type":"SMOKE",
+            "severity":"HIGH","position":{"x":1,"y":1},"label":")") +
+            label + R"("}]})");
+    EXPECT_THROW(loadPerceptionConfig(path, makeMap()), std::runtime_error);
+    std::remove(path.c_str());
+}
+
 }  // namespace
 }  // namespace patrol

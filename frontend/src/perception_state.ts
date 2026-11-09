@@ -26,6 +26,7 @@ export interface PerceptionState {
   after: number;
   latestEventId: number;
   truncated: boolean;
+  hasMore: boolean;
   pollFailures: number;
 }
 
@@ -34,7 +35,7 @@ export type PerceptionAction =
   | { type: "disabled" }
   | { type: "ready"; data: PerceptionLatest }
   | { type: "pollOk"; data: PerceptionLatest }
-  | { type: "eventsLoaded"; data: { events: PerceptionEvent[]; latestEventId: number; truncated: boolean } }
+  | { type: "eventsLoaded"; data: { events: PerceptionEvent[]; latestEventId: number; hasMore: boolean; truncated: boolean } }
   | { type: "pollFail" }
   | { type: "disconnect" };
 
@@ -122,6 +123,7 @@ export function createInitialPerceptionState(): PerceptionState {
     after: 0,
     latestEventId: 0,
     truncated: false,
+    hasMore: false,
     pollFailures: 0,
   };
 }
@@ -144,7 +146,9 @@ export function reducePerception(
       return applyObservation(state, action.data, "READY");
 
     case "pollOk":
-      return applyObservation(state, action.data, state.ui === "DISCONNECTED" ? "READY" : state.ui);
+      // 成功即 READY（审查 C1）：LOADING/DEGRADED/DISCONNECTED 首次或恢复
+      // 拉取成功都必须进入 READY，否则 LOADING 会卡死轮询启动。
+      return applyObservation(state, action.data, "READY");
 
     case "eventsLoaded": {
       const truncated = action.data.truncated;
@@ -155,14 +159,22 @@ export function reducePerception(
           events: [],
           after: 0,
           latestEventId: action.data.latestEventId,
+          hasMore: false,
           truncated: true,
         };
       }
+      // after 是增量游标，取本次返回事件的最大 eventId（审查 I1）：
+      // 不能取全局 latestEventId，否则一次分页 >50 条时中间事件被永久跳过。
+      const maxEventId = action.data.events.reduce(
+        (max, e) => Math.max(max, e.eventId),
+        0,
+      );
       return {
         ...state,
         events: mergeEvents(state.events, action.data.events),
-        after: action.data.latestEventId,
+        after: maxEventId > 0 ? maxEventId : state.after,
         latestEventId: action.data.latestEventId,
+        hasMore: action.data.hasMore,
         truncated: false,
       };
     }

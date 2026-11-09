@@ -148,7 +148,7 @@ bool RobotController::patrolStep() {
     {
         std::unique_lock<std::mutex> lock(mutex_);
         keepGoing = executor_.stepReplanned(lock, robot_, grid_, sequence_);
-        snap = buildSnapshotLocked();
+        snap = executor_.stepSnapshot();
     }
     if (observer_) {
         observer_(snap);
