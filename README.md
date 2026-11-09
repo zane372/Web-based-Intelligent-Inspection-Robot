@@ -2,7 +2,7 @@
 
 一套纯软件实现的二维机器人仿真系统。用户在浏览器中查看二维网格地图（含障碍物），通过「上、下、左、右」按钮逐格手动控制机器人，或一键开启自动巡检；后端校验命令并驱动虚拟机器人改变状态，再把位置、朝向、运行状态、巡检状态与命令结果返回前端。
 
-> 本仓库在 SPEC.md **基础版**之上，扩展了标准版的两项能力：**地图障碍物**（阻挡移动）与**自动巡检**（Boustrophedon 单元分解 + 贪心 BFS 组合策略覆盖遍历）。不包含传感器模拟、AI Agent、实体硬件等更高阶能力。
+> 本仓库在 SPEC.md **基础版**之上，扩展了标准版的多项能力：**地图障碍物**（阻挡移动）、**自动巡检**（Boustrophedon 单元分解 + 贪心 BFS 组合策略覆盖遍历）与**虚拟感知**（三向测距、异常检测与事件、独立感知面板）。不包含真实传感器硬件、AI Agent 等更高阶能力。
 
 ## 功能特性
 
@@ -12,16 +12,17 @@
 - 障碍物阻挡：移动目标为障碍物时位置不变、朝向更新并反馈 `BLOCKED_OBSTACLE`。
 - 自动巡检：一键遍历全部可通行格，覆盖路径由 **Boustrophedon 单元分解**（矩形单元蛇形扫描）与 **贪心 BFS** 两种规划器竞争取更短者；可随时停止，巡检期间位置与 `sequence` 实时刷新。巡检过程带障碍物/边界检测：若异常命中障碍物或边界，机器人报警（`BLOCKED_OBSTACLE`／`BLOCKED_BOUNDARY`）并自动重规划绕行路径，前端锁存显示「巡检碰到障碍物，正在绕行」或「巡检到达边界，正在绕行」。
 - 秒级状态轮询、页面隐藏暂停、断线重连、实例变化自动重载。
+- 虚拟感知：三向测距（前/左/右，命中障碍物或边界时报告距离与命中格）、异常检测（烟雾/高温/气体泄漏按曼哈顿距离判定）、事件流（异常进入/离开、边界/障碍接触），独立感知面板展示三向命中、活动异常与最近事件；感知故障不干扰手动控制与巡检。
 - 严格 RESTful API 契约、统一错误结构、命令序列号 `sequence` 单调递增。
 - C++ 单元测试、TypeScript 前端测试、Python 黑盒集成测试三层质量保障。
-- 多阶段 Docker 镜像 + Docker Compose 一键启动 + GitHub Actions 基础 CI。
+- 多阶段 Docker 镜像 + Docker Compose 一键启动 + GitHub Actions 基础 CI + CD 工作流（GHCR digest、Staging、生产审批与回滚）。
 
 ## 技术栈
 
 | 层次 | 技术 |
 | --- | --- |
 | 后端 | C++20（GCC 12+）、Crow（HTTP）、nlohmann/json 3.11.x |
-| 仿真核心 | 纯 C++（`domain/`、`control/`，不依赖 Crow／JSON／Canvas） |
+| 仿真核心 | 纯 C++（`domain/`、`control/`、`perception/`，不依赖 Crow／JSON／Canvas） |
 | 构建 | CMake 3.24+、Ninja、GoogleTest + CTest |
 | 前端 | TypeScript 5.x、Vite、原生 Canvas 2D、Vitest、ESLint |
 | 集成测试 | Python 3.12、pytest 8.x、requests 2.32.x |
@@ -35,9 +36,10 @@
 │   ├── src/
 │   │   ├── main.cpp        # 入口：配置加载、依赖组装、启动 HTTP
 │   │   ├── domain/         # 仿真领域模型（位置、朝向、网格、障碍物、机器人、巡检规划）
-│   │   ├── control/        # RobotController（序列号、互斥、快照）
+│   │   ├── control/        # RobotController（序列号、互斥、快照）+ PatrolExecutor（巡检线程）
+│   │   ├── perception/     # 虚拟感知（测距、异常检测、事件环形缓冲、感知服务）
 │   │   ├── api/            # HTTP 路由、命令校验、DTO 映射
-│   │   ├── config.cpp      # config/map.json 加载与校验
+│   │   ├── config.cpp      # config/map.json 与 config/perception.json 加载与校验
 │   │   └── dto.hpp         # 枚举 <-> 字符串、JSON DTO
 │   └── tests/              # GoogleTest 单元测试
 ├── frontend/               # TypeScript 前端
@@ -46,6 +48,7 @@
 │   ├── src/canvas/renderer.ts
 │   └── tests/              # Vitest 测试
 ├── config/map.json         # 地图与初始姿态配置
+├── config/perception.json  # 虚拟感知配置（测距范围、异常半径、异常点）
 ├── tests/integration/      # Python 黑盒集成测试
 ├── docs/                   # 项目文档与展示材料
 │   ├── README.md           # 文档索引
@@ -54,6 +57,7 @@
 │   ├── demo/演示脚本.md    # 结业演示脚本
 │   └── images/             # 规格编制依据参考图
 ├── .github/workflows/ci.yml
+├── .github/workflows/cd.yml
 ├── Dockerfile
 ├── docker-compose.yml
 ├── README.md               # 项目说明（本文件）
@@ -64,20 +68,23 @@
 
 ```
 ┌─────────────────────────────── 浏览器 ───────────────────────────────┐
-│  Canvas 渲染器 · 状态机 · 命令按钮 · 1s 轮询 · 断线重连              │
+│  Canvas 渲染器 · 状态机 · 命令按钮 · 1s 轮询 · 断线重连 · 感知面板   │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │ HTTP /api/v1（同源，Crow 静态托管 dist）
 ┌───────────────────────────────▼─────────────────────────────────────┐
 │  API 层（api/）    路由 · JSON 校验 · 统一错误 · 405/413/415        │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Control 层（control/）  RobotController：互斥 · sequence · 快照    │
+│                          PatrolExecutor：巡检线程 · 条件变量 · 游标 │
+├─────────────────────────────────────────────────────────────────────┤
+│  Perception 层（perception/）  三向测距 · 异常检测 · 事件环形缓冲   │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Domain 层（domain/）   Grid 障碍 · Robot 移动/边界/障碍 · 巡检规划 │
 └─────────────────────────────────────────────────────────────────────┘
         内存状态（无数据库），服务重启后恢复 config/map.json 初始位姿
 ```
 
-依赖方向为 `API → Control → Domain`，Domain 不依赖 Crow／JSON／Canvas。
+依赖方向为 `API → Control/Perception → Domain`，Domain 与 Perception 不依赖 Crow／JSON／Canvas。
 
 ## 快速开始
 
@@ -141,6 +148,8 @@ pytest tests/integration -q --base-url http://127.0.0.1:8080
 | GET | `/api/v1/map` | 地图信息 `{ mapId, width, height, origin, xAxis, yAxis, obstacles }` |
 | GET | `/api/v1/robot` | 机器人状态 `{ robotId, instanceId, position, heading, motionStatus, lastResult, sequence, patrolActive }` |
 | POST | `/api/v1/robot/commands` | 命令 `{ type: "MOVE"\|"RESET"\|"START_PATROL"\|"STOP_PATROL", direction? }`，返回 201 |
+| GET | `/api/v1/perception/latest` | 最新感知 `{ enabled, instanceId, observation, activeDetections, latestEventId }` |
+| GET | `/api/v1/perception/events` | 感知事件流 `?after=0&limit=50`，返回 `{ instanceId, events, oldestEventId, latestEventId, hasMore, truncated }` |
 
 命令请求必须携带 `Content-Type: application/json`，请求体上限 4096 字节。客户端不得提交坐标／朝向／sequence。
 
@@ -149,25 +158,31 @@ pytest tests/integration -q --base-url http://127.0.0.1:8080
 - 手动 `MOVE`／`RESET` 会隐式停止正在进行的巡检。
 - 命令结果（`result`／`lastResult`）新增：`BLOCKED_OBSTACLE`、`PATROL_STARTED`、`PATROL_STOPPED`、`PATROL_COMPLETED`。
 
-主要错误码：`400 MALFORMED_JSON / MISSING_FIELD / INVALID_COMMAND_TYPE / INVALID_DIRECTION / UNKNOWN_FIELD`、`413 PAYLOAD_TOO_LARGE`、`404 ROUTE_NOT_FOUND`、`405 METHOD_NOT_ALLOWED`、`415 UNSUPPORTED_MEDIA_TYPE`、`500 INTERNAL_ERROR`。非法请求不改变状态，也不占用 `sequence`。
+主要错误码：`400 MALFORMED_JSON / MISSING_FIELD / INVALID_COMMAND_TYPE / INVALID_DIRECTION / UNKNOWN_FIELD / INVALID_QUERY_PARAMETER`、`413 PAYLOAD_TOO_LARGE`、`404 ROUTE_NOT_FOUND`、`405 METHOD_NOT_ALLOWED`、`415 UNSUPPORTED_MEDIA_TYPE`、`500 INTERNAL_ERROR`。非法请求不改变状态，也不占用 `sequence`。
+
+**虚拟感知**（由 `PERCEPTION_CONFIG` 环境变量指向 `config/perception.json` 启用；未设置时感知关闭）：
+
+- 三向测距 `range-front/range-left/range-right` 随机器人朝向旋转，逐格前进，命中障碍物（`hitType: OBSTACLE` + 距离 + 命中格）或边界（`hitType: BOUNDARY` + 距离）即停，未命中为 `NONE`。
+- 异常检测按曼哈顿距离 `hazardRangeCells` 判定，进入半径生成 `ANOMALY_DETECTED`、离开生成 `ANOMALY_OUT_OF_RANGE`（保留最后位置，不宣称「恢复」）。
+- 首次撞边界/障碍生成 `CONTACT_BOUNDARY`／`CONTACT_OBSTACLE` 事件；事件流按 `eventId` 单调递增、200 条环形缓冲，支持 `after`/`limit` 分页。
 
 ## 测试
 
 | 层 | 命令 | 覆盖 |
 | --- | --- | --- |
-| C++ 单元测试 | `ctest --test-dir build --output-on-failure` | 四方向移动、四边界、障碍阻挡、重置、序列号、并发、巡检规划覆盖、命令校验 |
-| 前端测试 | `npm run lint && npm run typecheck && npm test && npm run build` | 状态机、API 客户端、坐标像素映射、障碍物渲染、巡检按钮 |
-| Python 集成测试 | `pytest tests/integration -q --base-url http://127.0.0.1:8080` | 健康、地图/状态契约（含障碍物/巡检态）、移动、边界、障碍、重置、自动巡检、错误处理 |
+| C++ 单元测试 | `ctest --test-dir build --output-on-failure` | 四方向移动、四边界、障碍阻挡、重置、序列号、并发、巡检规划覆盖、命令校验、测距、异常检测、感知事件、配置校验 |
+| 前端测试 | `npm run lint && npm run typecheck && npm test && npm run build` | 状态机、API 客户端、坐标像素映射、障碍物渲染、巡检按钮、感知面板、感知事件去重 |
+| Python 集成测试 | `pytest tests/integration -q --base-url http://127.0.0.1:8080` | 健康、地图/状态契约（含障碍物/巡检态）、移动、边界、障碍、重置、自动巡检、错误处理、感知契约、异常/接触事件 |
 
 ## 分工与贡献
 
 | 成员／方向 | 主责模块 | 说明 |
 | --- | --- | --- |
 | 成员 A／实现算法 | `backend/src/domain/`、`backend/tests/` 仿真单元测试 | 离散移动、边界/障碍规则、四方向增量、重置、Boustrophedon 单元分解 + 贪心 BFS 组合策略巡检规划 |
-| 成员 B／全栈 | `frontend/`、页面集成、根 README 与展示材料 | Canvas 绘制（含障碍物）、API Client、UI 状态机、巡检按钮、联调 |
-| 成员 C／运维 | `Dockerfile`、`docker-compose.yml`、`.dockerignore`、`.github/workflows/ci.yml` | 多阶段构建、非 root、CI 三 job |
-| 成员 D／嵌入式（虚拟设备软件） | `backend/src/api/`、`backend/src/control/`、`main.cpp`、配置加载 | API 契约、严格校验、序列号、巡检线程控制、静态托管 |
-| 成员 E／人工智能（质量保障） | `tests/integration/`、验收矩阵、测试报告 | pytest 黑盒测试、健康等待、错误路径覆盖 |
+| 成员 B／全栈 | `frontend/`、页面集成、根 README 与展示材料 | Canvas 绘制（含障碍物/异常图层）、API Client、UI 状态机、巡检按钮、感知面板、联调 |
+| 成员 C／运维 | `Dockerfile`、`docker-compose.yml`、`.dockerignore`、`.github/workflows/{ci,cd}.yml` | 多阶段构建、非 root、CI 三 job、CD（GHCR digest、Staging、生产审批/回滚） |
+| 成员 D／嵌入式（虚拟设备软件） | `backend/src/api/`、`backend/src/control/`、`backend/src/perception/`、`main.cpp`、配置加载 | API 契约、严格校验、序列号、巡检线程控制（PatrolExecutor）、虚拟感知服务、静态托管 |
+| 成员 E／人工智能（质量保障） | `tests/integration/`、验收矩阵、测试报告 | pytest 黑盒测试、健康等待、错误路径覆盖、感知契约 |
 
 ## 故障排查
 
