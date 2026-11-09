@@ -8,9 +8,12 @@
   <body>
     <main id="app">
       <header class="app-header">
-        <h1>智能巡检机器人</h1>
+        <div class="header-title-row">
+          <h1>智能巡检机器人</h1>
+          <p id="status" role="status" aria-live="polite">加载中…</p>
+        </div>
+        <p class="header-subtitle">二维网格地图仿真 · 手动控制与自动巡检</p>
       </header>
-      <p id="status" role="status" aria-live="polite">加载中…</p>
       <div id="layout">
         <section id="map-panel" aria-label="地图区">
           <div id="map-container">
@@ -55,7 +58,7 @@
             <div class="range-row"><span class="range-label">左</span><span id="range-left" class="range-value">—</span></div>
             <div class="range-row"><span class="range-label">右</span><span id="range-right" class="range-value">—</span></div>
           </div>
-          <div class="readout-row"><span class="range-label">观察序号</span><span id="perception-sequence">—</span></div>
+          <div class="readout-row"><span class="range-label">观察序号</span><span id="perception-sequence" class="range-value">—</span></div>
           <div id="perception-anomalies">
             <h3>活动异常</h3>
             <ul id="perception-anomaly-list" class="perception-list"></ul>
