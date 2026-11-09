@@ -51,3 +51,6 @@ Desktop.ini
 
 # 本地参考资料（非交付物）
 _reference/
+
+# 本地 UI 核验截图（非交付物）
+.ui-screenshots/
