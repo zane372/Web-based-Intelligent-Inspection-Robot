@@ -38,10 +38,7 @@ tests
 *.md
 docs
 _reference
-image attachment
 SPEC.md
-agent.md
-request.md
 
 # IDE
 .idea

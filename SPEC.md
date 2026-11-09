@@ -98,9 +98,9 @@
 
 本规格已核对以下材料，并只提取其中的基础版要求：
 
-- 本地[课程任务说明](request.md)：明确基础版范围、模板仓库用途，以及代码仓库、README、架构图、展示材料和成员分工等结业要求。
-- 附件[基础／标准／进阶范围图](<image attachment/屏幕截图 2026-11-05 215807.png>)及[结业材料清单](<image attachment/屏幕截图 2026-11-05 215754.png>)。
-- 附件[参考分层架构图](<image attachment/微信图片_20261020221830_254_1050.jpg>)和[项目推进说明](<image attachment/微信图片_20261020221831_255_1050.jpg>)：采用其 Web、API、控制、仿真、状态反馈的主链路，不采纳本阶段之外的模块。
+- 本地[课程任务说明](docs/request.md)：明确基础版范围、模板仓库用途，以及代码仓库、README、架构图、展示材料和成员分工等结业要求。
+- 附件[基础／标准／进阶范围图](<docs/images/屏幕截图 2026-11-05 215807.png>)及[结业材料清单](<docs/images/屏幕截图 2026-11-05 215754.png>)。
+- 附件[参考分层架构图](<docs/images/微信图片_20261020221830_254_1050.jpg>)和[项目推进说明](<docs/images/微信图片_20261020221831_255_1050.jpg>)：采用其 Web、API、控制、仿真、状态反馈的主链路，不采纳本阶段之外的模块。
 - [patrol-sim 模板仓库](https://github.com/Yhimhas/patrol-sim)，分析快照为 `main` 分支提交 `7d6edd44e58c98a08f8eafa6cfb7aca55c64e68a`：
   - [基础需求与 Git 验收](https://github.com/Yhimhas/patrol-sim/blob/7d6edd44e58c98a08f8eafa6cfb7aca55c64e68a/docs/01_%E9%A1%B9%E7%9B%AE%E9%9C%80%E6%B1%82.md)；
   - [小组分工模板](https://github.com/Yhimhas/patrol-sim/blob/7d6edd44e58c98a08f8eafa6cfb7aca55c64e68a/docs/02_%E5%B0%8F%E7%BB%84%E5%88%86%E5%B7%A5.md)；

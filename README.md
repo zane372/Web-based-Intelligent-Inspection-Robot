@@ -47,10 +47,16 @@
 │   └── tests/              # Vitest 测试
 ├── config/map.json         # 地图与初始姿态配置
 ├── tests/integration/      # Python 黑盒集成测试
-├── docs/demo/              # 展示材料
+├── docs/                   # 项目文档与展示材料
+│   ├── README.md           # 文档索引
+│   ├── request.md          # 课程任务说明
+│   ├── agent.md            # 协作与实现规范
+│   ├── demo/演示脚本.md    # 结业演示脚本
+│   └── images/             # 规格编制依据参考图
 ├── .github/workflows/ci.yml
 ├── Dockerfile
 ├── docker-compose.yml
+├── README.md               # 项目说明（本文件）
 └── SPEC.md                 # 软件规格说明书（契约基线）
 ```
 
