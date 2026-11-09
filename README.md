@@ -12,7 +12,7 @@
 - 障碍物阻挡：移动目标为障碍物时位置不变、朝向更新并反馈 `BLOCKED_OBSTACLE`。
 - 自动巡检：一键遍历全部可通行格，覆盖路径由 **Boustrophedon 单元分解**（矩形单元蛇形扫描）与 **贪心 BFS** 两种规划器竞争取更短者；可随时停止，巡检期间位置与 `sequence` 实时刷新。巡检过程带障碍物/边界检测：若异常命中障碍物或边界，机器人报警（`BLOCKED_OBSTACLE`／`BLOCKED_BOUNDARY`）并自动重规划绕行路径，前端锁存显示「巡检碰到障碍物，正在绕行」或「巡检到达边界，正在绕行」。
 - 秒级状态轮询、页面隐藏暂停、断线重连、实例变化自动重载。
-- 虚拟感知：三向测距（前/左/右，命中障碍物或边界时报告距离与命中格）、异常检测（烟雾/高温/气体泄漏按曼哈顿距离判定）、事件流（异常进入/离开、边界/障碍接触），独立感知面板展示三向命中、活动异常与最近事件；感知故障不干扰手动控制与巡检。
+- 虚拟感知：三向测距（前/左/右，命中障碍物或边界时报告距离与命中格）、异常检测（烟雾/高温/气体泄漏/油污泄漏按曼哈顿距离判定，每次重置后异常源位置随机）、事件流（异常进入/离开、边界/障碍接触），独立感知面板展示三向命中、活动异常与最近事件；感知故障不干扰手动控制与巡检。
 - 严格 RESTful API 契约、统一错误结构、命令序列号 `sequence` 单调递增。
 - C++ 单元测试、TypeScript 前端测试、Python 黑盒集成测试三层质量保障。
 - 多阶段 Docker 镜像 + Docker Compose 一键启动 + GitHub Actions 基础 CI + CD 工作流（GHCR digest、Staging、生产审批与回滚）。
@@ -48,7 +48,7 @@
 │   ├── src/canvas/renderer.ts
 │   └── tests/              # Vitest 测试
 ├── config/map.json         # 地图与初始姿态配置
-├── config/perception.json  # 虚拟感知配置（测距范围、异常半径、异常点）
+├── config/perception.json  # 虚拟感知配置（测距范围、异常半径、异常源初始位置，重置后随机）
 ├── tests/integration/      # Python 黑盒集成测试
 ├── docs/                   # 项目文档与展示材料
 │   ├── README.md           # 文档索引
@@ -164,7 +164,7 @@ pytest tests/integration -q --base-url http://127.0.0.1:8080
 **虚拟感知**（由 `PERCEPTION_CONFIG` 环境变量指向 `config/perception.json` 启用；未设置时感知关闭）：
 
 - 三向测距 `range-front/range-left/range-right` 随机器人朝向旋转，逐格前进，命中障碍物（`hitType: OBSTACLE` + 距离 + 命中格）或边界（`hitType: BOUNDARY` + 距离）即停，未命中为 `NONE`。
-- 异常检测按曼哈顿距离 `hazardRangeCells` 判定，进入半径生成 `ANOMALY_DETECTED`、离开生成 `ANOMALY_OUT_OF_RANGE`（保留最后位置，不宣称「恢复」）。
+- 异常检测按曼哈顿距离 `hazardRangeCells` 判定，支持烟雾/高温/气体泄漏/油污泄漏四类异常；进入半径生成 `ANOMALY_DETECTED`、离开生成 `ANOMALY_OUT_OF_RANGE`（保留最后位置，不宣称「恢复」）。每次 `RESET` 后异常源位置重新随机（真值不对外暴露）。
 - 首次撞边界/障碍生成 `CONTACT_BOUNDARY`／`CONTACT_OBSTACLE` 事件；事件流按 `eventId` 单调递增、200 条环形缓冲，支持 `after`/`limit` 分页。
 
 ## 测试
