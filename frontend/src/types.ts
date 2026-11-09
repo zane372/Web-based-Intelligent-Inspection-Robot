@@ -53,3 +53,66 @@ export interface CommandResponse {
   result: CommandResult;
   robot: RobotState;
 }
+
+// ---- 虚拟感知（SPEC 6）----
+export type HitType = "NONE" | "BOUNDARY" | "OBSTACLE";
+export type RelativeDirection = "FRONT" | "LEFT" | "RIGHT";
+export type HazardType = "SMOKE" | "HIGH_TEMP" | "GAS_LEAK";
+export type Severity = "LOW" | "MEDIUM" | "HIGH";
+export type PerceptionEventType =
+  | "ANOMALY_DETECTED"
+  | "ANOMALY_OUT_OF_RANGE"
+  | "CONTACT_BOUNDARY"
+  | "CONTACT_OBSTACLE";
+
+export interface RangeReading {
+  sensorId: "range-front" | "range-left" | "range-right";
+  relativeDirection: RelativeDirection;
+  absoluteDirection: Heading;
+  hitType: HitType;
+  distanceCells: number | null;
+  cell: Position | null;
+}
+
+export interface Detection {
+  hazardId: string;
+  hazardType: HazardType;
+  severity: Severity;
+  label: string | null;
+  position: Position;
+  distanceCells: number;
+}
+
+export interface PerceptionObservation {
+  sequence: number;
+  rangeCells: number;
+  ranges: RangeReading[];
+  detections: Detection[];
+}
+
+export interface PerceptionEvent {
+  eventId: number;
+  instanceId: string;
+  sequence: number;
+  type: PerceptionEventType;
+  position: Position;
+  hazard: Detection | null;
+  contactResult: "BLOCKED_BOUNDARY" | "BLOCKED_OBSTACLE" | null;
+}
+
+export interface PerceptionLatest {
+  enabled: boolean;
+  instanceId: string;
+  observation: PerceptionObservation | null;
+  activeDetections: Detection[];
+  latestEventId: number;
+}
+
+export interface PerceptionEvents {
+  instanceId: string;
+  events: PerceptionEvent[];
+  oldestEventId: number | null;
+  latestEventId: number;
+  hasMore: boolean;
+  truncated: boolean;
+}

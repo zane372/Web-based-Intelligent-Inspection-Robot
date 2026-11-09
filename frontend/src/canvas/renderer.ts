@@ -1,6 +1,6 @@
 // Canvas 2D 渲染器：地图网格、外边界、机器人本体与朝向指示。
 // 不依赖 DOM 格子；坐标换算 pixelX = (x + 0.5) * cellSize。
-import type { Heading, MapInfo, RobotState } from "../types";
+import type { Detection, Heading, MapInfo, RobotState, Severity } from "../types";
 
 export const DEFAULT_CELL_SIZE = 32;
 
@@ -129,5 +129,41 @@ export function draw(
 
   if (robot) {
     drawRobot(ctx, robot, cellSize);
+  }
+}
+
+function severityColor(severity: Severity): string {
+  switch (severity) {
+    case "LOW":
+      return "#f59e0b";
+    case "MEDIUM":
+      return "#ea580c";
+    case "HIGH":
+      return "#dc2626";
+  }
+}
+
+// 感知图层：只绘制「已发现」的异常（警告三角 + 感叹号文字，非仅颜色）。
+// 不得泄露未发现异常的位置（SPEC 6.8）。
+export function drawPerceptionLayer(
+  ctx: CanvasRenderingContext2D,
+  discovered: Detection[],
+  cellSize: number,
+): void {
+  for (const d of discovered) {
+    const center = cellCenter(d.position, cellSize);
+    const r = cellSize * 0.38;
+    ctx.fillStyle = severityColor(d.severity);
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y - r);
+    ctx.lineTo(center.x + r * 0.92, center.y + r * 0.72);
+    ctx.lineTo(center.x - r * 0.92, center.y + r * 0.72);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${Math.round(cellSize * 0.5)}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("!", center.x, center.y + r * 0.12);
   }
 }

@@ -230,6 +230,119 @@ button:not(:disabled):hover {
   line-height: 1.6;
 }
 
+/* 虚拟感知面板：独立卡片，第三列。 */
+#perception-panel {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+#perception-panel h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#perception-panel h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+#perception-status {
+  margin: 0;
+  min-height: 18px;
+  font-weight: 600;
+}
+
+#perception-status[data-state="DISABLED"] {
+  color: #64748b;
+}
+
+#perception-status[data-state="DISCONNECTED"],
+#perception-status[data-state="DEGRADED"] {
+  color: #b91c1c;
+}
+
+/* 三向测距行。 */
+#perception-ranges {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.range-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.range-label {
+  color: #64748b;
+}
+
+.range-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* 活动异常与事件列表。 */
+.perception-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.perception-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.perception-list .perception-empty {
+  color: #94a3b8;
+}
+
+/* 异常严重度指示点（图形 + 文字，非仅颜色）。 */
+.anomaly-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.anomaly-dot.severity-low {
+  background: #f59e0b;
+}
+
+.anomaly-dot.severity-medium {
+  background: #ea580c;
+}
+
+.anomaly-dot.severity-high {
+  background: #dc2626;
+}
+
 /* 窄屏（如手机）时回退为单列纵向布局。 */
 @media (max-width: 800px) {
   #app {
@@ -247,6 +360,11 @@ button:not(:disabled):hover {
   }
 
   #side-panel {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  #perception-panel {
     flex: 1 1 auto;
     width: 100%;
   }

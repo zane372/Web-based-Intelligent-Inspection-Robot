@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, fetchRobot, sendCommand } from "../src/api/client";
+import {
+  ApiError,
+  fetchPerceptionEvents,
+  fetchPerceptionLatest,
+  fetchRobot,
+  sendCommand,
+} from "../src/api/client";
 
 const robotJson = {
   robotId: "robot-1",
@@ -110,5 +116,52 @@ describe("API client", () => {
     const error = await fetchRobot().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "MISSING_FIELD" });
+  });
+
+  it("fetchPerceptionLatest 请求正确路径", async () => {
+    const mock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          enabled: true,
+          instanceId: "i1",
+          observation: null,
+          activeDetections: [],
+          latestEventId: 0,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    const latest = await fetchPerceptionLatest();
+    expect(latest.enabled).toBe(true);
+    expect(mock).toHaveBeenCalledWith(
+      "/api/v1/perception/latest",
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+  });
+
+  it("fetchPerceptionEvents 携带 after 与 limit 查询参数", async () => {
+    const mock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          instanceId: "i1",
+          events: [],
+          oldestEventId: null,
+          latestEventId: 0,
+          hasMore: false,
+          truncated: false,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    const view = await fetchPerceptionEvents(3, 50);
+    expect(view.latestEventId).toBe(0);
+    expect(mock).toHaveBeenCalledWith(
+      "/api/v1/perception/events?after=3&limit=50",
+      expect.objectContaining({ signal: expect.anything() }),
+    );
   });
 });

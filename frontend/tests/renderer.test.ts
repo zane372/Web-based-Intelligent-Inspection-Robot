@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cellCenter, DEFAULT_CELL_SIZE, draw } from "../src/canvas/renderer";
-import type { MapInfo, RobotState } from "../src/types";
+import {
+  cellCenter,
+  DEFAULT_CELL_SIZE,
+  draw,
+  drawPerceptionLayer,
+} from "../src/canvas/renderer";
+import type { Detection, MapInfo, RobotState } from "../src/types";
 
 const map: MapInfo = {
   mapId: "grid-20x20",
@@ -36,6 +41,7 @@ function mockCtx(): CanvasRenderingContext2D {
     stroke: noop,
     fill: noop,
     arc: noop,
+    fillText: noop,
     setTransform: noop,
   } as unknown as CanvasRenderingContext2D;
   return ctx;
@@ -67,5 +73,25 @@ describe("draw", () => {
       obstacles: [{ x: 4, y: 4 }, { x: 5, y: 4 }],
     };
     expect(() => draw(mockCtx(), obstacleMap, robot, 32)).not.toThrow();
+  });
+});
+
+describe("drawPerceptionLayer", () => {
+  it("绘制已发现异常不抛异常", () => {
+    const discovered: Detection[] = [
+      {
+        hazardId: "h1",
+        hazardType: "SMOKE",
+        severity: "HIGH",
+        label: null,
+        position: { x: 3, y: 3 },
+        distanceCells: 1,
+      },
+    ];
+    expect(() => drawPerceptionLayer(mockCtx(), discovered, 32)).not.toThrow();
+  });
+
+  it("无异常时绘制不抛异常", () => {
+    expect(() => drawPerceptionLayer(mockCtx(), [], 32)).not.toThrow();
   });
 });

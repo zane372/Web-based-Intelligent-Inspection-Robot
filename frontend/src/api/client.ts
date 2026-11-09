@@ -5,6 +5,8 @@ import type {
   CommandType,
   Heading,
   MapInfo,
+  PerceptionEvents,
+  PerceptionLatest,
   RobotState,
 } from "../types";
 
@@ -88,4 +90,17 @@ export function sendCommand(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+export function fetchPerceptionLatest(): Promise<PerceptionLatest> {
+  return request<PerceptionLatest>("/perception/latest");
+}
+
+export function fetchPerceptionEvents(
+  after: number,
+  limit: number,
+): Promise<PerceptionEvents> {
+  return request<PerceptionEvents>(
+    `/perception/events?after=${after}&limit=${limit}`,
+  );
 }

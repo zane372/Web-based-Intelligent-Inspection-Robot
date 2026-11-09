@@ -47,6 +47,24 @@
             </ul>
           </section>
         </aside>
+        <section id="perception-panel" aria-label="虚拟感知">
+          <h2>虚拟感知</h2>
+          <p id="perception-status" role="status" aria-live="polite">感知加载中…</p>
+          <div id="perception-ranges" aria-label="三向测距">
+            <div class="range-row"><span class="range-label">前</span><span id="range-front" class="range-value">—</span></div>
+            <div class="range-row"><span class="range-label">左</span><span id="range-left" class="range-value">—</span></div>
+            <div class="range-row"><span class="range-label">右</span><span id="range-right" class="range-value">—</span></div>
+          </div>
+          <div class="readout-row"><span class="range-label">观察序号</span><span id="perception-sequence">—</span></div>
+          <div id="perception-anomalies">
+            <h3>活动异常</h3>
+            <ul id="perception-anomaly-list" class="perception-list"></ul>
+          </div>
+          <div id="perception-events">
+            <h3>感知事件</h3>
+            <ul id="perception-event-list" class="perception-list" aria-live="polite"></ul>
+          </div>
+        </section>
       </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
