@@ -1,1490 +1,1171 @@
-# Web 智能巡检机器人仿真系统软件规格说明书（基础版）
+# Web 智能巡检机器人二维仿真系统软件规格说明书
 
 | 文档项 | 内容 |
 | --- | --- |
-| 文档名称 | Web 智能巡检机器人仿真系统软件规格说明书 |
-| 文档版本 | v1.0 |
-| 目标版本 | **基础版（最低保底目标）** |
+| 文档名称 | Web 智能巡检机器人二维仿真系统软件规格说明书 |
+| 文档版本 | v2.0 |
+| 文档定位 | **现有功能契约基线 + 虚拟感知、架构优化与 CI/CD 迭代设计** |
 | 适用团队 | 5 人学生／初级开发团队 |
-| 主要实现语言 | **C++20 优先**，TypeScript 用于 Web 界面，Python 用于集成测试与质量验证 |
-| 部署形态 | 单个应用容器，由 Docker Compose 一键构建、启动 |
-| 文档状态 | 设计基线，供团队评审与实现；不代表功能已经开发完成 |
+| 主要实现语言 | C++20、TypeScript；Python 仅用于黑盒集成测试与质量验证 |
+| 部署形态 | 单个应用容器，Docker Compose 构建和运行 |
+| 当前交付状态 | 手动控制、障碍物和自动巡检已有实现；虚拟感知、架构优化和 CD 为后续任务 |
 
-> **范围声明：本阶段不包含路径规划、传感器模拟、AI Agent 等高级功能。**
+> **状态标记**：`[当前]` 表示仓库已有代码及相应测试或文档支撑；`[规划]` 表示后续设计，尚未实现；`[非目标]` 表示本规格不要求实现。
 >
-> 本阶段也不实现自动巡检、BFS/A*、多机器人协同、复杂运动学／动力学、真实硬件接入或任何自主决策。机器人只能响应用户逐次发出的手动命令，每次最多移动一个网格。
+> 本版将旧规格中“手动控制、无障碍、不实现自动巡检”的表述校正为仓库现状。**本次只完善规格，不要求修改已有自动巡检算法、接口或交互。** 后续架构重构也必须保持第 4 章定义的巡检外部行为。
+>
+> `[当前]` 的描述依据本仓库源码、测试和 README，不表示每次文档修订都重新完成了一轮运行验收；实际验收结果以对应 PR、Actions 和验收记录为准。
 
 ---
 
-## 1. 项目概述
+## 1. 项目概述与范围
 
 ### 1.1 项目背景
 
-本项目是一套纯软件实现的二维机器人手动控制仿真系统。用户在浏览器中查看二维网格地图，通过“上、下、左、右”按钮发送控制命令；后端校验命令并驱动虚拟机器人改变状态，再把位置、朝向、运行状态和命令结果返回前端。
+本项目是一套纯软件实现的二维网格巡检机器人仿真系统。用户可以在浏览器中：
 
-项目的教学重点不是高级机器人能力，而是完整跑通以下工程闭环：
+1. 查看包含障碍物的网格地图、机器人位置和朝向；
+2. 通过方向按钮逐格手动移动，或启动、停止自动巡检；
+3. 查看位置、运行状态、最近结果、命令序列号和巡检状态；
+4. 在后续迭代中观察虚拟测距、虚拟异常源和感知事件，但不接入真实硬件。
 
-1. Web 页面渲染与用户交互；
-2. RESTful API 契约设计与数据校验；
-3. C++ 控制模块和仿真模块协作；
-4. 状态更新、页面反馈与错误恢复；
-5. Git 团队协作、自动化检查、容器交付和成果展示。
+项目重点是形成可理解、可测试、可复现的工程闭环，而不是模拟复杂物理世界或训练 AI 模型。
 
-### 1.2 核心定位
+### 1.2 项目目标
 
-- **纯软件**：不依赖机器人本体、单片机、传感器、串口、ROS 或其他实体设备。
-- **二维网格**：地图是规则矩形网格，机器人占据一个单元格，不使用连续物理坐标。
-- **单机器人**：系统只维护一个虚拟机器人实例。
-- **手动控制**：每次有效移动命令只尝试移动一格，不存在自动连续运动。
-- **同步执行**：后端收到命令后立即完成一次离散状态迁移，并在响应中返回最新状态。
-- **内存仿真**：运行状态保存在进程内存中，不引入数据库；服务重启后恢复配置中的初始状态。
-- **工程优先**：必须留下可审查的提交记录、测试结果、CI 记录、运行文档和成员贡献证据。
+| 编号 | 目标 | 状态 | 可观察结果 |
+| --- | --- | --- | --- |
+| G-01 | 二维地图与障碍物可视化 | `[当前]` | Canvas 显示网格、边界、障碍物、机器人和朝向。 |
+| G-02 | 安全的手动控制 | `[当前]` | 四方向逐格移动；边界和障碍物阻止越界或进入不可通行格。 |
+| G-03 | 自动覆盖巡检 | `[当前]` | 后端生成覆盖路径，机器人自动逐格巡检，可停止、重置和恢复。 |
+| G-04 | 状态一致与错误反馈 | `[当前]` | 页面与 API 快照一致；非法请求不修改状态；断线可恢复。 |
+| G-05 | 可复现构建与基础 CI | `[当前]` | Docker Compose 一键启动，三个 GitHub Actions Job 执行自动检查。 |
+| G-06 | 可解释的虚拟感知 | `[规划]` | 页面显示确定性测距、异常检测和可分页的感知事件。 |
+| G-07 | 可维护的模块化架构 | `[规划]` | Domain、感知、控制、API 与前端编排职责分离，线程和状态归属明确。 |
+| G-08 | 可追踪、可回滚的 CD | `[规划]` | 同一镜像摘要部署预发布和生产，发布有审批、健康验证和回滚记录。 |
 
-### 1.3 项目目标
+### 1.3 范围与实现状态
 
-| 编号 | 目标 | 可观察结果 |
+| 能力 | 状态 | 本规格的处理方式 |
 | --- | --- | --- |
-| G-01 | 可视化二维地图 | 页面能清晰显示网格、地图边界、机器人位置和朝向。 |
-| G-02 | 手动移动 | 用户可通过四个方向按钮逐格控制机器人。 |
-| G-03 | 边界保护 | 越界尝试不会使机器人离开地图，页面能反馈边界结果。 |
-| G-04 | 状态一致 | 页面位置、朝向、运行状态与后端 API 返回值一致。 |
-| G-05 | 可复现交付 | 新环境按 README 可启动；Docker Compose 可一键构建并运行。 |
-| G-06 | 基础质量保障 | PR 触发 C++、前端和容器/API 自动检查，结果在仓库可见。 |
-| G-07 | 协作可追踪 | 五名成员均有明确的代码、测试、文档或运维交付物及提交证据。 |
+| 单机器人、矩形网格、四方向手动移动 | `[当前]` | 作为稳定契约记录。 |
+| 静态障碍物、边界保护、重置 | `[当前]` | 作为稳定契约记录。 |
+| Boustrophedon 单元分解 + 贪心 BFS 组合巡检 | `[当前]` | 记录真实算法和状态语义，不提出新的算法改造任务。 |
+| 1 秒轮询、断线重连、实例变化处理 | `[当前]` | 作为前端状态一致性基线。 |
+| C++、前端、Python 三层检查及容器冒烟 | `[当前]` | 保留为 PR 必需质量门禁。 |
+| 虚拟测距、虚拟异常源、感知事件与页面展示 | `[规划]` | 第 6 章给出可实现的最小完整方案。 |
+| 控制线程解耦、CMake 依赖拆分、API／前端编排优化 | `[规划]` | 第 5 章给出不改变外部行为的重构约束。 |
+| 镜像发布、预发布部署、生产审批与回滚 | `[规划]` | 第 9 章给出 CD 方案；当前不能写成“已部署”。 |
+| AI Agent、自然语言控制、自主异常处置决策 | `[非目标]` | 不训练模型，不接入 Agent。 |
+| 连续运动学／动力学、真实传感器噪声模型、物理引擎 | `[非目标]` | 首版虚拟感知采用离散、确定性规则。 |
+| 实体机器人、ROS／RTOS、串口、驱动和固件 | `[非目标]` | 不接入真实设备或协议。 |
+| 多机器人、用户权限、数据库、微服务、消息队列 | `[非目标]` | 保持单机器人、模块化单体、内存状态和单容器。 |
 
-### 1.4 范围边界
+### 1.4 自动巡检功能的变更边界
 
-#### 1.4.1 本阶段必须实现
+1. 本规格只把已有自动巡检纳入基线，**本次文档任务不新增巡检需求，也不修改其实现**。
+2. 后续感知功能只观察状态，不参与现有路径规划，不把虚拟异常源自动转换成障碍物。
+3. 后续架构优化可调整内部类、线程调度和依赖关系，但不得改变第 4 章的 API、路径覆盖语义、序列号语义和按钮行为。
+4. 如未来确需修改巡检行为，必须另立需求，说明原因和兼容性影响，并同时更新本规格、README、测试和演示材料；不得借“重构”或“感知接入”静默改变行为。
 
-- 一张可配置的矩形二维网格地图；默认 `20 × 20`，无障碍物。
-- 一个虚拟机器人；默认初始位置 `(0, 0)`，初始朝向 `RIGHT`。
-- Canvas 绘制网格、边界、机器人和朝向标记。
-- 上、下、左、右四个手动按钮，以及一个恢复初始状态的“重置”按钮。
-- 获取地图、获取机器人状态、创建手动命令、健康检查四类 API。
-- 越界判断、输入校验、统一错误响应、命令后即时反馈和秒级状态轮询。
-- C++ 单元测试、Python API 集成测试、前端基础检查。
-- Git 分支／PR／Commit 规范、根 README、架构图和分工记录。
-- 多阶段 Dockerfile、Docker Compose 一键启动、GitHub Actions 基础 CI。
-
-#### 1.4.2 明确不做
-
-| 排除范围 | 本阶段处理方式 |
-| --- | --- |
-| 自动巡检、路径搜索、自动避障 | 不设计、不实现、不提供相关 API。 |
-| 虚拟传感器、障碍物感知、异常检测算法 | 不设计、不实现；边界反馈仅是基础移动规则的一部分。 |
-| AI 模型、自然语言命令、Agent、自主决策 | 不设计、不训练、不接入。 |
-| 复杂机器人控制、物理引擎、连续速度和加速度 | 不实现；只有离散一格移动。 |
-| 实体硬件、驱动、固件、串口、ROS／RTOS | 不实现、不模拟外部设备协议。 |
-| 多机器人、用户体系、权限系统、数据库 | 不属于本次最低交付范围。 |
-| 自动部署到云平台、复杂监控和弹性伸缩 | 不属于基础 CI／Docker 验收范围。 |
-
-### 1.5 目标用户与核心使用场景
+### 1.5 目标用户与核心场景
 
 **目标用户**：课程验收教师、项目访客和小组成员。
 
-**主流程**：
+**当前手动流程**：加载地图和状态 → 点击方向 → 后端校验并移动 → 前端使用响应重绘 → 边界／障碍反馈 → 重置。
 
-1. 用户打开系统首页；
-2. 页面加载地图和机器人状态；
-3. 用户点击任一方向按钮；
-4. 前端发送一个手动命令，后端同步执行；
-5. 页面依据响应重绘机器人，并显示最新位置、朝向和结果；
-6. 用户尝试越过边界，机器人仍留在地图内，页面显示“已到边界”；
-7. 用户点击“重置”，机器人恢复配置中的初始状态。
+**当前巡检流程**：点击“自动巡检” → 后端规划并启动 → 页面轮询查看位置和巡检状态 → 停止或等待完成 → 必要时手动接管或重置。
 
-**失败恢复流程**：网络或服务异常时，页面保留最后一次确认的状态、明确标记连接异常，不伪造移动成功；恢复连接后重新拉取状态。
+**规划感知流程**：机器人状态迁移后生成观察 → 后端返回测距和异常事件 → 页面展示当前读数及已发现异常 → 用户理解环境状态；现有巡检仍按原契约执行。
 
-### 1.6 编制依据与约束映射
+**失败恢复**：网络异常时保留最后确认状态并明确提示，不伪造移动或感知成功；恢复后重新同步。服务重启会改变 `instanceId`，前端必须重新获取地图、状态和感知数据。
 
-本规格已核对以下材料，并只提取其中的基础版要求：
-
-- 本地[课程任务说明](docs/request.md)：明确基础版范围、模板仓库用途，以及代码仓库、README、架构图、展示材料和成员分工等结业要求。
-- 附件[基础／标准／进阶范围图](<docs/images/屏幕截图 2026-11-05 215807.png>)及[结业材料清单](<docs/images/屏幕截图 2026-11-05 215754.png>)。
-- 附件[参考分层架构图](<docs/images/微信图片_20261020221830_254_1050.jpg>)和[项目推进说明](<docs/images/微信图片_20261020221831_255_1050.jpg>)：采用其 Web、API、控制、仿真、状态反馈的主链路，不采纳本阶段之外的模块。
-- [patrol-sim 模板仓库](https://github.com/Yhimhas/patrol-sim)，分析快照为 `main` 分支提交 `7d6edd44e58c98a08f8eafa6cfb7aca55c64e68a`：
-  - [基础需求与 Git 验收](https://github.com/Yhimhas/patrol-sim/blob/7d6edd44e58c98a08f8eafa6cfb7aca55c64e68a/docs/01_%E9%A1%B9%E7%9B%AE%E9%9C%80%E6%B1%82.md)；
-  - [小组分工模板](https://github.com/Yhimhas/patrol-sim/blob/7d6edd44e58c98a08f8eafa6cfb7aca55c64e68a/docs/02_%E5%B0%8F%E7%BB%84%E5%88%86%E5%B7%A5.md)；
-  - [架构与接口模板](https://github.com/Yhimhas/patrol-sim/blob/7d6edd44e58c98a08f8eafa6cfb7aca55c64e68a/docs/03_%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84%E4%B8%8E%E6%8E%A5%E5%8F%A3.md)；
-  - [运行与结业提交模板](https://github.com/Yhimhas/patrol-sim/blob/7d6edd44e58c98a08f8eafa6cfb7aca55c64e68a/docs/04_%E8%BF%90%E8%A1%8C%E4%B8%8E%E7%BB%93%E4%B8%9A%E6%8F%90%E4%BA%A4.md)。
-
-**事实边界**：上述模板仓库在分析快照中主要提供文档骨架和待补全项，并未规定本项目的实际语言、框架、字段和接口。本规格中的技术选型与 API 是面向本团队的具体设计，不应被误认为模板已有实现。
-
-### 1.7 术语
+### 1.6 术语
 
 | 术语 | 定义 |
 | --- | --- |
-| 网格／Cell | 地图中的最小单位，机器人一次移动跨越一个网格。 |
-| 位置／Position | 整数坐标 `(x, y)`，表示机器人所在网格，而非像素坐标。 |
-| 朝向／Heading | 机器人当前面向的方向：`UP`、`DOWN`、`LEFT`、`RIGHT`。 |
-| 命令／Command | 前端创建的一次操作请求，本阶段类型为 `MOVE` 或 `RESET`。 |
-| 已应用／MOVED | 命令有效，机器人成功移动到相邻网格。 |
-| 边界阻止／BLOCKED_BOUNDARY | 命令格式有效，但目标网格在地图外；位置不变。 |
-| 序列号／sequence | 服务端已接受命令的单调递增编号，用于识别状态新旧。 |
-| 实例号／instanceId | 服务进程每次启动生成的不透明标识，用于识别服务重启。 |
+| Cell／网格 | 地图最小单位；机器人每次移动跨越一个网格。 |
+| Position | 整数坐标 `(x,y)`，不是像素坐标。 |
+| Heading | `UP`、`DOWN`、`LEFT`、`RIGHT` 四方向之一。 |
+| World Truth | 后端静态地图、障碍物及规划中的虚拟异常源配置；不代表前端已经感知。 |
+| Observation | 在某个机器人状态序列号上生成的一次确定性感知快照。 |
+| Hazard | 配置的虚拟异常源，例如烟雾、高温或气体泄漏；不是实体障碍物。 |
+| Detection | 异常源进入机器人感知半径时产生的一条当前检测读数。 |
+| `sequence` | 当前进程内机器人状态序列号，按第 4.5 节规则递增。 |
+| `eventId` | 感知事件独立编号，不能与 `sequence` 或 `commandId` 混用。 |
+| `instanceId` | 每次服务启动生成的实例标识，用于识别重启。 |
+| OUT_OF_RANGE | 异常源离开感知半径；只表示“当前未检测到”，不表示真实异常已经消失。 |
+
+### 1.7 编制依据
+
+- [课程任务说明](docs/request.md)：基础版、标准版选做方向和结业材料要求。
+- [根 README](README.md)：当前功能、技术栈、启动方式和 API 摘要。
+- [协作与实现规范](docs/agent.md)：职责边界、文档状态、测试和变更纪律。
+- [演示脚本](docs/demo/演示脚本.md)：当前手动、障碍和自动巡检展示流程。
+- 当前实现：`backend/src/domain/`、`backend/src/control/`、`backend/src/api/`、`frontend/src/`、`tests/`。
+- 当前自动化：[`.github/workflows/ci.yml`](.github/workflows/ci.yml)、[Dockerfile](Dockerfile)、[docker-compose.yml](docker-compose.yml)。
 
 ---
 
-## 2. 技术栈建议
+## 2. 技术基线与模块划分
 
-### 2.1 选型原则
+### 2.1 当前技术栈 `[当前]`
 
-1. **C/C++ 优先**：后端、控制模块、仿真核心和状态管理全部使用 C++；不将核心逻辑转移到 Python。
-2. **适合初学者**：优先选择概念少、示例多、构建路径清晰的方案，避免为单页演示引入重型框架。
-3. **职责清晰**：C++ 仿真领域代码不得依赖 Web 框架；Canvas 不得自行决定移动结果。
-4. **可测试**：核心移动规则必须能在不启动浏览器和网络的情况下独立测试。
-5. **可复现**：所有依赖通过 lockfile、固定 release 或固定提交锁定，禁止直接追踪不稳定分支。
-6. **交付简单**：生产演示只运行一个应用容器，减少端口、反向代理和服务编排复杂度。
+| 层次 | 技术基线 | 用途 |
+| --- | --- | --- |
+| 后端 | C++20、GCC 12+、Crow 1.2.0、Boost.System／Asio | HTTP、控制与仿真。 |
+| JSON | nlohmann/json 3.11.3 | 请求、响应和配置解析。 |
+| 构建与测试 | CMake 3.24+、CTest、GoogleTest 1.15.2 | 编译、依赖和 C++ 单元测试。 |
+| 前端 | TypeScript 5.x、Vite 5、原生 HTML/CSS、Canvas 2D | 页面、状态和网格渲染。 |
+| 前端质量 | ESLint、TypeScript `tsc --noEmit`、Vitest | 静态检查和纯函数测试。 |
+| 集成测试 | Python 3.12、pytest、requests | 对真实 HTTP 服务做黑盒验证。 |
+| 交付 | Node.js 22、Docker、Compose v2、GitHub Actions | 构建、单容器运行和 CI。 |
 
-### 2.2 推荐技术栈
+实际版本以 `frontend/package-lock.json`、`tests/integration/requirements.txt` 和 CMake `FetchContent` 声明为准。依赖变更必须在 PR 中说明原因并同步文档，不得静默追踪不稳定分支。
 
-| 层次 | 推荐技术 | 建议基线 | 用途与理由 |
-| --- | --- | --- | --- |
-| 后端语言 | **C++** | C++20；GCC 12+ 或 MSVC 2022 | 类型安全、RAII、STL 足以支撑小型仿真；满足 C/C++ 首要要求。 |
-| HTTP 框架 | Crow | 固定经验证的 1.2.x release 或等价稳定提交 | 路由简洁，适合教学型 REST API 和静态页面托管。 |
-| JSON | nlohmann/json | 固定 3.11.x 或更新稳定版本 | 用于请求解析、响应序列化和配置读取；校验逻辑仍由后端显式实现。 |
-| 构建 | CMake + Ninja | CMake 3.24+ | 跨平台管理 C++ 编译、依赖和测试。 |
-| C++ 测试 | GoogleTest + CTest | 固定稳定 release | 测试移动、边界、重置和状态不变量。 |
-| Web 语言 | TypeScript | 5.x，由 lockfile 固化 | 为 API 数据和 Canvas 坐标提供静态类型，减少初级团队联调错误。 |
-| Web 构建 | Vite + npm | Node.js 22 LTS | 启动简单、构建快；提交 `package-lock.json`，统一使用 `npm ci`。 |
-| 页面实现 | 原生 HTML/CSS + Canvas 2D | 无额外 UI 框架 | 单页面无需引入大型组件体系，突出网格渲染与状态反馈。 |
-| 前端测试 | Vitest | 与 Vite 兼容的固定版本 | 测试方向映射、像素换算、状态归约等纯函数。 |
-| Python | pytest + requests | Python 3.12；pytest 8.x、requests 2.32.x | 编写黑盒 API／集成测试和冒烟验证，不承担生产业务逻辑。 |
-| 版本管理 | Git + GitHub | 当前稳定版本 | 短分支、PR、Code Review、Actions 和成果留痕。 |
-| CI | GitHub Actions | 固定 Action 主版本 | 运行 C++ 单元测试、前端检查和容器/API 冒烟测试。 |
-| 容器 | Docker + Compose v2 | Docker Engine 24+ | 多阶段构建，一条命令交付完整系统。 |
-| 运行系统 | Linux 容器；本地支持 Windows／Linux／macOS | Debian Bookworm 运行镜像 | Docker 为统一验收环境，本地开发命令作为辅助。 |
+### 2.2 语言职责边界
 
-**版本落地要求**：表中版本是设计基线。开始编码时由运维负责人建立依赖清单并锁定实际版本；若某个依赖版本组合不兼容，应在 PR 中记录替换原因，并同步更新 README 和本规格，而不是静默升级。
+- **C++**：地图、机器人、巡检规划、控制、状态、API、配置，以及规划中的感知引擎和事件存储。
+- **TypeScript**：API 类型、请求封装、UI 状态、轮询、Canvas 和文字反馈；不得复制后端移动、规划或感知权威算法。
+- **Python**：只编写启动后的黑盒测试，不承载生产业务逻辑，也不进入运行镜像。
+- **C**：不因“嵌入式方向”而另写一套 C 仿真核心。
 
-### 2.3 方案比较与选择
-
-| 方案 | 优点 | 代价 | 结论 |
-| --- | --- | --- | --- |
-| **A：C++ Crow + 原生 TypeScript + Python 测试** | C++ 占比高；模块少；单容器；适合 5 人基础项目 | 需要团队掌握基本 CMake 和异步 UI 状态处理 | **推荐，作为本规格基线**。 |
-| B：C++ Drogon + TypeScript | Web 框架能力更完整 | 依赖和概念更多，对最低目标而言偏重 | 仅在团队已有 Drogon 经验时替换。 |
-| C：Python FastAPI + TypeScript | 后端上手快 | 核心后端不再以 C/C++ 为主，不符合用户首要约束 | 本阶段不采用。 |
-
-**不选择双容器 Nginx + 后端的原因**：它更适合复杂部署，但会增加配置和联调面。基础版由 C++ 服务直接托管前端构建产物，页面与 API 同源，可避免额外 CORS 配置；这不影响后续学习反向代理，但后续内容不属于本次交付。
-
-### 2.4 语言职责边界
-
-- **C++**：地图、机器人、移动规则、控制服务、状态存储、API、配置校验、静态文件服务。
-- **TypeScript**：页面、Canvas、按钮、API Client、轮询、错误提示；不得复制一套“最终权威移动算法”。
-- **Python**：启动后黑盒验证、边界用例、异常输入、状态一致性检查；不得成为运行时依赖。
-- **C**：本阶段不强制使用。只有复用明确的 C 库时才允许出现 C 代码，不得以 C 另行实现重复仿真核心。
-
-### 2.5 建议仓库结构与所有权
+### 2.3 当前与规划目录
 
 ```text
 project-root/
 ├── backend/
 │   ├── CMakeLists.txt
 │   ├── src/
-│   │   ├── main.cpp                 # 进程入口、依赖组装
-│   │   ├── api/                     # Crow 路由、JSON 校验、错误映射
-│   │   ├── control/                 # 命令串行化、状态快照、sequence
-│   │   └── domain/                  # Grid、Robot、Direction 等纯 C++
-│   └── tests/                       # GoogleTest 单元测试
+│   │   ├── main.cpp
+│   │   ├── domain/                 # [当前] Grid、Robot、巡检规划
+│   │   ├── control/                # [当前] RobotController、巡检线程
+│   │   ├── perception/             # [规划] 纯感知规则、观察和事件模型
+│   │   ├── api/                    # [当前] Crow 路由、命令校验
+│   │   ├── config.cpp              # [当前] 地图配置
+│   │   └── dto.hpp                 # [当前] API DTO 与枚举映射
+│   └── tests/                      # [当前] C++ 测试；[规划] 感知测试
 ├── frontend/
-│   ├── package.json
-│   ├── package-lock.json
 │   ├── src/
-│   │   ├── main.ts                  # 页面组装与事件绑定
-│   │   ├── api/client.ts            # 唯一后端访问入口
-│   │   ├── canvas/renderer.ts       # 网格与机器人绘制
-│   │   ├── state.ts                 # UI 状态和状态更新
+│   │   ├── api/client.ts           # [当前] 唯一 HTTP 入口
+│   │   ├── canvas/renderer.ts      # [当前] 地图与机器人
+│   │   ├── perception/             # [规划] 感知面板和地图覆盖层
+│   │   ├── main.ts                 # [当前] DOM、命令、轮询编排
+│   │   ├── state.ts / types.ts
 │   │   └── styles.css
-│   └── tests/                       # 前端纯函数测试
+│   └── tests/
 ├── config/
-│   └── map.json                     # 地图及初始状态的唯一配置源
-├── tests/
-│   └── integration/
-│       ├── requirements.txt
-│       ├── conftest.py
-│       └── test_basic_api.py
-├── docs/
-│   └── demo/                        # 实际截图、演示材料
-├── .github/workflows/ci.yml
-├── .gitignore
-├── .dockerignore
-├── Dockerfile
-├── docker-compose.yml
+│   ├── map.json                    # [当前] 地图、障碍和初始姿态
+│   └── perception.json             # [规划] 感知参数与虚拟异常源
+├── tests/integration/              # [当前] Python 黑盒测试
+├── .github/workflows/
+│   ├── ci.yml                      # [当前] 三个验证 Job
+│   └── cd.yml                      # [规划] 镜像、预发布、生产提升与回滚
+├── deploy/compose.yaml             # [规划] 按镜像摘要部署的 Compose 配置
+├── Dockerfile / docker-compose.yml
 ├── README.md
-└── SPEC.md                          # 本规格，作为契约基线
+└── SPEC.md
 ```
 
-目录是实现约束而非装饰：业务规则应进入 `domain/`，不得散落在路由或 Canvas 事件回调中；具体文件名可在不削弱职责边界的前提下调整。
-
-`frontend/package.json` 必须提供 `lint`、`typecheck`、`test`、`build` 四个脚本，其中 `test` 使用 `vitest run` 等单次退出模式，禁止 CI 进入 watch；`typecheck` 至少执行 `tsc --noEmit`。ESLint、TypeScript 和 Vitest 版本均由 `package-lock.json` 固化。
+目录表达职责，不要求为每个小类型建立文件，也不允许借机建立通用插件平台或微服务体系。
 
 ---
 
-## 3. 系统架构图说明
+## 3. 系统架构与运行约束
 
-### 3.1 总体架构
+### 3.1 当前架构 `[当前]`
 
 ```mermaid
 flowchart TB
     subgraph Browser["浏览器"]
-        UI["页面与方向按钮<br/>HTML / CSS / TypeScript"]
-        Canvas["Canvas 2D 渲染器"]
-        Client["API Client<br/>命令发送 / 状态轮询"]
-        UI --> Client
-        Client --> Canvas
+        UI["方向 / 重置 / 巡检按钮"]
+        State["UI 状态机与 1 秒轮询"]
+        Canvas["Canvas 2D"]
+        Client["API Client"]
+        UI --> State
+        State --> Client
+        State --> Canvas
     end
 
-    subgraph App["C++ 应用进程"]
-        Routes["REST API 层<br/>Crow Routes / JSON 校验"]
-        Control["控制模块<br/>RobotController / Mutex"]
-        Sim["仿真领域模块<br/>Grid / Robot / MoveResult"]
-        Store["内存状态<br/>RobotState / sequence / instanceId"]
-        Static["静态资源托管<br/>frontend/dist"]
-        Routes --> Control
-        Control --> Sim
-        Sim --> Store
-        Control --> Store
+    subgraph Server["单个 C++ 进程"]
+        API["Crow API / JSON 校验 / DTO"]
+        Control["RobotController<br/>互斥、sequence、巡检线程"]
+        Domain["Grid / Robot / PatrolPlanner"]
+        Memory["内存状态与 instanceId"]
+        Static["frontend/dist 静态托管"]
+        API --> Control
+        Control --> Domain
+        Control --> Memory
     end
 
-    Client -->|"同源 HTTP / JSON"| Routes
-    Routes -->|"地图、状态、命令结果"| Client
+    Client -->|"同源 HTTP / JSON"| API
     Browser -->|"GET /"| Static
 ```
 
-**架构要点**：
+依赖方向为 `API → Control → Domain`。Canvas 不是状态权威；Domain 不依赖 Crow、JSON 或 Canvas；Python、Actions 和 Docker 不进入业务调用链。
 
-- Canvas 只负责显示，不是状态权威来源。
-- API 层负责 HTTP 和 JSON，不直接拼接移动结果。
-- 控制模块负责命令原子性、状态快照、序列号和线程安全。
-- 仿真领域模块负责坐标与边界规则，不依赖 Crow、JSON 或 Canvas。
-- 内存状态是唯一运行时权威；前端不持久化另一份权威状态。
-- Python 测试、GitHub Actions 和 Docker 属于验证／交付工具，不进入业务调用链。
+### 3.2 当前模块职责 `[当前]`
 
-### 3.2 模块职责
+| 模块 | 负责 | 不得负责 |
+| --- | --- | --- |
+| `domain/Grid` | 矩形边界、障碍物、可通行判断 | 网络、UI、感知异常源 |
+| `domain/Robot` | 单格移动、朝向、阻挡结果、重置 | 线程、HTTP、序列号 |
+| `domain/PatrolPlanner` | 从静态网格和起点生成确定性覆盖路径 | 后台线程、DOM、直接修改机器人 |
+| `control/RobotController` | 状态互斥、序列号、巡检执行与停止 | JSON 解析、Canvas 绘制 |
+| `api/` 与 `dto.hpp` | 路由、严格校验、HTTP 错误和 DTO 映射 | 另写一套移动或巡检算法 |
+| `frontend/state.ts` | 纯 UI 状态归约、过期快照处理 | 直接发起网络请求 |
+| `frontend/main.ts` | DOM、命令、计时器和轮询编排 | 自行计算权威坐标 |
+| `frontend/api/client.ts` | 同源请求、5 秒超时和错误转换 | 判断边界或实现第二套仿真 |
+| `frontend/canvas/renderer.ts` | 网格、障碍、机器人和朝向绘制 | 修改机器人状态 |
 
-| 模块 | 必须负责 | 不得负责 | 主要交付者 |
-| --- | --- | --- | --- |
-| Web 页面 | 展示地图、状态和提示；发送手动操作；处理加载／失败状态 | 自行修改权威坐标；绕过 API 移动 | 全栈方向 |
-| API Client | 请求封装、超时、响应类型解析、避免重复提交 | 判断边界；实现第二套仿真规则 | 全栈方向 |
-| REST API | 路由、媒体类型检查、字段校验、状态码、错误结构 | 直接操作前端；写入数据库 | 嵌入式／虚拟设备软件方向 |
-| 控制模块 | 串行处理命令、调用仿真、维护序列号、返回快照 | 解析 HTTP 细节 | 嵌入式／虚拟设备软件方向 |
-| 仿真核心 | 坐标增量、边界、朝向、位置、重置规则 | 网络、JSON、UI、文件日志 | 实现算法方向 |
-| 配置与容器 | 提供地图配置、构建运行环境、健康检查 | 保存运行时状态到数据库 | 运维方向 |
-| 集成验证 | 以真实 HTTP 请求验证契约和端到端基础流程 | 训练模型或生成控制策略 | 人工智能方向转基础质量保障 |
+### 3.3 地图和初始状态 `[当前]`
 
-### 3.3 手动命令时序
+`config/map.json` 是地图与初始姿态的唯一配置源。默认配置为：
 
-```mermaid
-sequenceDiagram
-    actor U as 用户
-    participant W as Web UI
-    participant A as C++ API
-    participant C as RobotController
-    participant S as Robot/Grid
+- `mapId = grid-30x30`，`width = 30`，`height = 30`；
+- 初始位置 `(0,0)`，朝向 `RIGHT`；
+- 40 个静态障碍物；
+- 原点位于左上角，x 向右递增，y 向下递增；
+- 宽、高均为 `1..100` 的整数，初始位置必须在界内且不是障碍物；
+- 障碍物元素必须是界内整数坐标 `{x,y}`，不能与初始位置重合；
+- 地图运行期间只读，修改配置后重启生效；
+- 运行状态只保存在内存，服务重启恢复配置初态，`sequence = 0`、`lastResult = NONE`、`patrolActive = false`，并生成新的 `instanceId`。
 
-    U->>W: 点击 RIGHT
-    W->>W: 禁用控制按钮，显示执行中
-    W->>A: POST /api/v1/robot/commands
-    A->>A: 校验 Content-Type、JSON 和字段
-    A->>C: execute(MOVE, RIGHT)
-    C->>C: 加锁，保证一次命令原子执行
-    C->>S: applyManualMove(RIGHT, grid)
-    S->>S: 设置朝向，计算目标格，检查边界
-    S-->>C: MoveResult + 最新位置/朝向
-    C->>C: sequence + 1，保存状态
-    C-->>A: CommandResult + RobotState
-    A-->>W: 201 Created + JSON
-    W->>W: 更新状态并重绘，恢复按钮
-```
+### 3.4 部署约束 `[当前]`
 
-### 3.4 状态获取与“实时”反馈策略
-
-基础版采用“**命令响应即时回写 + 可见页面每秒轮询**”，不引入 WebSocket：
-
-1. 页面初始化时并行请求地图和机器人状态；两者成功后才进入可操作状态。
-2. 手动命令成功后，立即使用命令响应中的完整 `robot` 状态重绘，不等待下一次轮询。
-3. 页面可见时，每 `1000 ms` 请求一次机器人状态；页面隐藏时暂停，重新可见时立即查询一次。
-4. 同一 `instanceId` 下，前端不得用较小 `sequence` 的迟到响应覆盖较新状态。
-5. `instanceId` 改变表示服务重启：前端立即进入 `LOADING`，暂停应用旧地图上的新状态，重新并行请求地图和机器人状态；两者都成功后再接受新实例状态、清除旧命令提示并进入 `READY`。
-6. 轮询失败不修改机器人状态；连续 3 次失败后显示“连接已中断”，提供“重新连接”操作。
-7. POST 命令不得自动重试。超时或连接中断时先 GET 最新状态，再让用户决定是否继续，避免一次点击被重复执行。
-
-### 3.5 状态、并发与重启语义
-
-- 所有状态读写经 `RobotController`；写命令和同线程读取快照必须在同一互斥保护范围内。
-- 每次合法且完整处理的 `MOVE`／`RESET` 命令，`sequence` 恰好加 1；包括被边界阻止的合法命令。
-- 格式错误、字段错误、不支持的媒体类型和未知路由不改变状态，也不增加 `sequence`。
-- `GET` 不改变状态。
-- 多客户端并发命令按服务端实际获得执行锁的顺序处理，API 不承诺跨客户端的先后顺序。
-- 前端在自己的命令执行期间禁用控制按钮，减少单个用户的意外并发。
-- 进程重启后加载 `config/map.json`，`sequence` 从 0 重新开始，并生成新的 `instanceId`。
-- 不保存历史命令，不提供命令回放；`commandId` 只用于当次响应和简单日志定位。
+- 一个容器内运行一个 C++ 应用进程，监听 `0.0.0.0:8080`。
+- `/` 和静态资源来自 `STATIC_ROOT`，容器内为 `/app/web`；API 前缀为 `/api/v1`。
+- `MAP_CONFIG` 默认为 `/app/config/map.json`；宿主机端口由 `HOST_PORT` 决定，默认 8080。
+- 日志输出到 stdout／stderr；不安装数据库，不挂载状态卷，运行镜像不包含 Python、Node 依赖目录或编译工具链。
+- 容器使用 UID 10001 的非 root 用户，并设置 `no-new-privileges`。
+- 健康检查为 `GET /api/v1/health`；停止使用 `docker compose down`，内存状态随进程结束而丢弃。
 
 ---
 
-## 4. 功能需求详细说明
+## 4. 当前功能与 API 契约 `[当前]`
 
-### 4.1 前端界面需求
+> 本章是现有实现的回归基线。除修复经确认的缺陷外，后续任务不得改变本章行为；尤其不得因接入虚拟感知而修改巡检规划策略。
 
-#### 4.1.1 页面布局
-
-页面至少包含以下区域，且无需登录：
-
-1. **标题区**：系统名称及“基础版·手动网格仿真”说明。
-2. **地图区**：一个 Canvas，显示网格、边界和机器人。
-3. **控制区**：方向键采用清晰的方向布局，重置按钮独立放置，避免误触。
-4. **状态区**：显示 `x`、`y`、朝向、运行状态、最近一次命令结果和连接状态。
-5. **反馈区**：显示加载、执行中、边界、请求失败和恢复信息；不得只依赖浏览器 `alert()`。
-6. **帮助区**：简述“每次移动一格”“越界不会离开地图”“坐标原点位于左上角”。
-
-桌面端可采用“左侧地图、右侧控制与状态”的布局；窄屏下改为纵向排列，控制区不得被横向裁切。基础验收视口为 `360 × 800 CSS px`：页面不得出现横向滚动，四个方向按钮、重置按钮、状态文字和反馈区均可访问，Canvas 可等比缩小以适应可用宽度。
-
-#### 4.1.2 Canvas 2D 渲染要求
+### 4.1 网格、手动移动与障碍物
 
 | 编号 | 要求 |
 | --- | --- |
-| FR-UI-001 | 使用 HTML `<canvas>` 的 2D Context 绘制，不用 DOM 格子逐个替代 Canvas。 |
-| FR-UI-002 | 默认地图逻辑尺寸为 `20 × 20`，默认逻辑单元格边长 `32 px`，Canvas 逻辑尺寸为 `640 × 640`。 |
-| FR-UI-003 | 网格线、外边界和机器人必须可区分；外边界线条应明显粗于内部网格线。 |
-| FR-UI-004 | 机器人用“填充图形 + 朝向箭头／三角形”表示，不能只靠颜色表达朝向。 |
-| FR-UI-005 | 网格中心映射为 `pixelX = (x + 0.5) * cellSize`、`pixelY = (y + 0.5) * cellSize`。 |
-| FR-UI-006 | 地图与 Canvas 均采用 x 向右、y 向下，禁止一处使用屏幕坐标、另一处使用数学坐标而未转换。 |
-| FR-UI-007 | 每次确认的状态变化后重绘；无变化时不运行持续动画循环。 |
-| FR-UI-008 | Canvas 随容器等比缩放，不得改变逻辑坐标；需要适配高 DPI 时按 `devicePixelRatio` 设置 backing store 并统一缩放 Context。 |
-| FR-UI-009 | 页面必须显示机器人所在格子与边界的相对关系；不得出现机器人只绘制一半到地图外的状态。 |
-| FR-UI-010 | Canvas 不可用时显示文字状态和替代说明；所有控制仍使用原生按钮，保证键盘可聚焦。 |
+| FR-CUR-001 | 每次合法 `MOVE` 只尝试移动一格，不接受目标坐标、速度、朝向或 `sequence`。 |
+| FR-CUR-002 | 先更新 `heading`，再计算候选格并检查边界、障碍物。 |
+| FR-CUR-003 | 越界时位置不变，返回 `BLOCKED_BOUNDARY`，`motionStatus = BLOCKED`。 |
+| FR-CUR-004 | 目标格为障碍物时位置不变，返回 `BLOCKED_OBSTACLE`，`motionStatus = BLOCKED`。 |
+| FR-CUR-005 | 成功移动后位置更新，`motionStatus = IDLE`、`lastResult = MOVED`。 |
+| FR-CUR-006 | 阻挡不会锁死机器人；后续成功移动可恢复 `IDLE`。 |
+| FR-CUR-007 | `RESET` 恢复配置中的位置和朝向，`lastResult = RESET`，但不清零 `sequence`、不改变 `instanceId`。 |
 
-**推荐视觉编码**：浅色网格背景、深色网格线、对比明显的机器人圆形／箭头和边界线。正文和控件文字对比度至少 `4.5:1`，大号文字至少 `3:1`；机器人、朝向箭头和地图外边界等关键非文本图形与相邻背景对比度至少 `3:1`。失败信息不能只用红色表达，必须同时有文字或图标。
+方向增量：
 
-#### 4.1.3 按钮与交互状态
+| Direction | dx | dy |
+| --- | ---: | ---: |
+| `UP` | 0 | -1 |
+| `DOWN` | 0 | +1 |
+| `LEFT` | -1 | 0 |
+| `RIGHT` | +1 | 0 |
 
-| 控件 | 行为 | 执行期间 | 可访问性要求 |
+例如机器人在 `(0,0)` 收到 `MOVE / UP` 后仍为 `(0,0)`，但朝向变为 `UP`；机器人在 `(4,3)` 向下进入默认障碍格 `(4,4)` 时被阻止，朝向仍更新为 `DOWN`。
+
+### 4.2 自动巡检规划
+
+| 编号 | 要求 |
+| --- | --- |
+| FR-PAT-001 | `START_PATROL` 从**当前位置**规划路径，而不是强制先回初始点。 |
+| FR-PAT-002 | 同一调用分别计算 Boustrophedon 单元分解路径和贪心 BFS 路径，选择方向步数较短者；等长时选择 Boustrophedon。 |
+| FR-PAT-003 | Boustrophedon 按障碍边界分解矩形单元，在单元内比较四种蛇形变体，并用 BFS 衔接跨单元路径。 |
+| FR-PAT-004 | 贪心策略反复以 BFS 前往最近未访问可通行格；四方向搜索顺序固定为上、下、左、右，保证结果确定。 |
+| FR-PAT-005 | 起点计为已访问；路径只走界内非障碍格，只承诺覆盖从起点可达的可通行格。 |
+| FR-PAT-006 | 被障碍物隔离的“可通行但不可达”格子不计入本次可覆盖范围。 |
+| FR-PAT-007 | 无障碍地图覆盖 N 格需要 N−1 步；含障碍地图不宣称全局最短，只保证组合结果不劣于两种候选路径的较短者。 |
+| FR-PAT-008 | 起点不可通行或没有可访问的未覆盖格时返回空路径，由控制层按“立即完成”处理。 |
+
+这里的 Boustrophedon 是离散网格覆盖策略，不涉及连续物理轨迹。规划函数只返回方向序列，不自行推进机器人。
+
+### 4.3 自动巡检执行与接管
+
+1. 非空路径启动后台线程，默认每 **250 ms** 推进一步，每步仍调用相同的单格移动规则。
+2. 路径执行完后自动停止，`patrolActive = false`、`lastResult = PATROL_COMPLETED`、`motionStatus = IDLE`。
+3. `STOP_PATROL` 停止进行中的巡检，设置 `PATROL_STOPPED`；未巡检时调用是幂等空操作。
+4. 巡检进行中再次 `START_PATROL` 返回 `PATROL_STARTED`，但不重复启动线程，也不增加 `sequence`。
+5. `MOVE` 或 `RESET` 会先隐式停止当前巡检，再执行本条手动命令；不会额外增加一次“停止”序列号。
+6. 无可遍历路径时，启动命令仍返回 201 和 `PATROL_STARTED`，但响应中的机器人为 `patrolActive = false`、`lastResult = PATROL_COMPLETED`，不创建巡检线程。
+7. 执行器在每一步前做防御性边界／障碍检查。如果异常命中，保持位置、更新朝向、设置相应 `BLOCKED_*`、增加 `sequence`，再从当前位置重规划剩余路径。
+8. 重规划本身不增加 `sequence`；没有剩余路径时按完成处理。静态地图正常运行时，规划路径本应已经避开障碍。
+9. 控制器析构时停止并等待巡检线程退出，避免后台线程脱离对象生命周期。
+
+当前巡检不提供路径下载、已访问格列表、覆盖率、暂停／续跑、巡检报告或历史任务 API。页面显示“自动巡检中…”和“停止巡检”；前端若在快照中观察到巡检阻挡结果，会将“正在绕行”提示锁存约 1500 ms，避免被下一次 `MOVED` 立即覆盖。由于页面按 1 秒轮询而巡检每 250 ms 推进一步，**瞬时阻挡状态可能被轮询漏看**；规划中的感知事件流用于改善后续可观察性，而不是改写巡检逻辑。
+
+### 4.4 当前命令与状态迁移
+
+| 操作 | 成功 HTTP | `result` | 关键状态 |
 | --- | --- | --- | --- |
-| `↑ 上` | 创建 `MOVE / UP` 命令 | 禁用 | 原生 `<button>`，`aria-label="向上移动"` |
-| `↓ 下` | 创建 `MOVE / DOWN` 命令 | 禁用 | 原生 `<button>`，`aria-label="向下移动"` |
-| `← 左` | 创建 `MOVE / LEFT` 命令 | 禁用 | 原生 `<button>`，`aria-label="向左移动"` |
-| `→ 右` | 创建 `MOVE / RIGHT` 命令 | 禁用 | 原生 `<button>`，`aria-label="向右移动"` |
-| `重置` | 创建 `RESET` 命令 | 禁用 | 文案明确；本操作无重要数据损失，无需确认弹窗 |
-| `重新连接` | 重新查询地图和状态 | 显示加载状态 | 仅在断连／初始化失败时需要 |
+| `MOVE` | 201 | `MOVED` / `BLOCKED_BOUNDARY` / `BLOCKED_OBSTACLE` | 返回执行后的完整 `robot`。 |
+| `RESET` | 201 | `RESET` | 隐式停止巡检，恢复初始姿态。 |
+| `START_PATROL` | 201 | `PATROL_STARTED` | 可能正在巡检，也可能空路径立即完成。 |
+| `STOP_PATROL` | 201 | `PATROL_STOPPED` | `patrolActive = false`。 |
 
-- 按钮建议最小点击区域 `44 × 44 CSS px`，焦点样式清晰。
-- 方向按钮可支持键盘方向键作为等价输入，但**按钮是必验路径，键盘快捷键不是验收前置条件**。
-- 单击后先进入执行中状态，但不得乐观修改坐标；只有收到有效成功响应才能更新权威状态。
-- 所有控制按钮在一次命令未结束时禁用，防止连点产生非预期多步移动。
-- 被边界阻止属于正常业务结果，应显示短暂但可辨认的提示，并保留最新坐标和朝向。
-- HTTP 错误时显示可读摘要；详细错误码可放在辅助文本中，便于联调。
-- 状态更新区使用 `aria-live="polite"`；断连等阻断性错误可使用 `role="alert"`，避免屏幕阅读器无法感知。
+`PATROL_COMPLETED` 只出现在机器人 `lastResult` 中，不是命令响应的 `result` 枚举。
 
-#### 4.1.4 前端 UI 状态机
+### 4.5 `sequence` 与 `commandId` 语义
 
-| UI 状态 | 进入条件 | 地图／状态显示 | 控制按钮 |
+| 事件 | `sequence` 变化 |
+| --- | ---: |
+| 合法 `MOVE`，包括被边界／障碍阻止 | +1 |
+| 合法 `RESET`，包括隐式停止巡检 | +1 |
+| 非巡检状态下受理 `START_PATROL`，包括空路径立即完成 | +1 |
+| 已巡检时重复 `START_PATROL` | 0 |
+| 巡检中受理 `STOP_PATROL` | +1 |
+| 未巡检时 `STOP_PATROL` | 0 |
+| 每个自动巡检移动或防御性阻挡步 | +1 |
+| 路径完成标记、重规划本身 | 不额外增加 |
+| GET、非法 JSON、非法字段、未知路由 | 0 |
+
+- `sequence` 只在当前 `instanceId` 内比较，重启后从 0 重新开始。
+- `commandId` 由响应时的 `sequence` 格式化为 `cmd-%08d`。幂等空操作不增加序列号，因此 `commandId` 可能与前一条重复；**它不是全局唯一键，也不能作为客户端幂等重试键**。
+- 状态快照中的字段在同一互斥保护范围内复制；前端不得拼接来自不同序列号的机器人字段。
+- 全图路径规划可在状态锁外执行；所有机器人状态修改仍必须经过控制器。架构优化需进一步收敛并发代际和线程生命周期，见第 5 章。
+
+### 4.6 当前 API 总表
+
+| 方法与路径 | 请求体 | 成功码 | 说明 |
 | --- | --- | --- | --- |
-| `LOADING` | 初次加载或手动重连 | 显示加载提示 | 禁用 |
-| `READY` | 地图和状态有效 | 显示已确认状态 | 启用 |
-| `EXECUTING` | 命令请求进行中 | 保留最后确认状态，显示执行中 | 禁用 |
-| `BOUNDARY_FEEDBACK` | 返回 `BLOCKED_BOUNDARY` | 显示后端最新状态和边界提示 | 启用 |
-| `DEGRADED` | 轮询暂时失败 | 保留旧状态并标记可能过期 | 可暂时保留，但不伪造结果 |
-| `DISCONNECTED` | 连续 3 次查询失败或初始化失败 | 保留旧状态并明确断连 | 禁用，仅允许重连 |
+| `GET /api/v1/health` | 无 | 200 | `{ status, instanceId }`，支持 HEAD。 |
+| `GET /api/v1/map` | 无 | 200 | 地图尺寸、坐标约定和障碍物，支持 HEAD。 |
+| `GET /api/v1/robot` | 无 | 200 | 最新完整机器人快照，支持 HEAD。 |
+| `POST /api/v1/robot/commands` | 下述四种命令之一 | 201 | 同步受理命令并返回结果和快照。 |
 
-`BOUNDARY_FEEDBACK` 是提示状态，不是另一套机器人权威状态；收到下一条有效命令结果后可清除该提示。
+通用约定：
 
-#### 4.1.5 前端数据与函数边界
+- JSON 媒体类型为 `application/json; charset=utf-8`；POST 必须声明 JSON Content-Type，允许携带 charset。
+- 请求体上限为 4096 字节；字段使用 camelCase，枚举使用大写蛇形命名。
+- 成功响应不额外包裹 `data`；错误统一为 `error` 对象。
+- 生产页面与 API 同源，不默认开放任意来源 CORS；开发环境只通过 Vite 代理 `/api`。
+- `/api/` 下未知路径返回 JSON 404；已知资源的方法不允许时返回 JSON 405 和 `Allow` 头。
+- `/` 返回 `index.html`；其他非 API 静态路径命中文件才返回内容，禁止 `..` 等不安全路径段。
 
-建议定义与 API 一一对应的 `RobotState`、`MapInfo`、`CommandRequest`、`CommandResponse` 和 `ApiError` 类型。渲染函数接收只读状态：
-
-```text
-render(ctx, mapInfo, robotState, viewConfig) -> void
-```
-
-API Client 统一负责 base URL、超时、JSON 解析和错误转换；事件回调不得散落裸 `fetch()`。生产构建使用同源相对路径 `/api/v1`，开发服务器仅通过 Vite proxy 将 `/api` 转发到本地 C++ 服务。
-
-### 4.2 后端 API 设计
-
-#### 4.2.1 通用约定
-
-- API 前缀：`/api/v1`。
-- 数据格式：`application/json; charset=utf-8`。
-- POST 请求必须带 `Content-Type: application/json`，允许附带 charset。
-- 所有时间均为同步请求处理；本阶段没有异步任务队列。
-- 所有响应均不得返回堆栈、源代码路径或依赖内部细节。
-- 成功响应不包一层无意义的 `data`；错误响应统一使用 `error` 对象。
-- JSON 字段使用 `camelCase`，枚举使用大写蛇形命名。
-- 服务只允许后端变更位置，客户端不得提交目标坐标、朝向或 `sequence`。
-- 请求体上限固定为 `4 KiB`（4096 字节）；超过时返回 `413 PAYLOAD_TOO_LARGE`，不得读入无限数据。
-- 生产页面与 API 同源；开发代理是唯一的跨域规避方式，不默认开放任意来源 CORS。
-- `/api/` 下未匹配的路由必须返回 JSON 404，不得回退到 `index.html`；静态页面回退只适用于非 API 的页面 GET 请求。
-
-#### 4.2.3 接口总表
-
-| 用途 | 方法与路径 | 请求体 | 成功码 | 说明 |
-| --- | --- | --- | --- | --- |
-| 获取地图 | `GET /api/v1/map` | 无 | 200 | 返回网格尺寸及坐标约定。 |
-| 获取机器人状态 | `GET /api/v1/robot` | 无 | 200 | 返回最新完整状态快照。 |
-| 创建手动命令 | `POST /api/v1/robot/commands` | `MOVE` 或 `RESET` | 201 | 同步执行命令并返回结果和完整状态。 |
-| 健康检查 | `GET /api/v1/health` | 无 | 200 | 配置加载成功且服务可处理请求时返回正常。 |
-
-未列出的业务 API 不属于基础版契约。
-
-#### 4.2.2 核心数据模型
-
-**RobotState**
-
-| 字段 | 类型 | 必填 | 含义 |
-| --- | --- | --- | --- |
-| `robotId` | string | 是 | 固定为 `robot-1`。 |
-| `instanceId` | string | 是 | 当前服务进程实例标识。 |
-| `position.x` | integer | 是 | 列坐标，范围 `0 .. width-1`。 |
-| `position.y` | integer | 是 | 行坐标，范围 `0 .. height-1`。 |
-| `heading` | string enum | 是 | `UP`、`DOWN`、`LEFT`、`RIGHT`。 |
-| `motionStatus` | string enum | 是 | `IDLE` 或 `BLOCKED`。 |
-| `lastResult` | string enum | 是 | `NONE`、`MOVED`、`BLOCKED_BOUNDARY`、`RESET`。 |
-| `sequence` | integer | 是 | 已处理合法命令数，初始为 0。 |
+### 4.7 当前核心数据模型
 
 **MapInfo**
 
-| 字段 | 类型 | 必填 | 含义 |
-| --- | --- | --- | --- |
-| `mapId` | string | 是 | 当前地图配置标识。 |
-| `width` | integer | 是 | 列数，范围 `1 .. 100`。 |
-| `height` | integer | 是 | 行数，范围 `1 .. 100`。 |
-| `origin` | string | 是 | 固定为 `TOP_LEFT`。 |
-| `xAxis` | string | 是 | 固定为 `RIGHT`。 |
-| `yAxis` | string | 是 | 固定为 `DOWN`。 |
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `mapId` | string | 配置中的地图标识。 |
+| `width` / `height` | integer | 列数／行数。 |
+| `origin` | string | 固定 `TOP_LEFT`。 |
+| `xAxis` / `yAxis` | string | 固定 `RIGHT` / `DOWN`。 |
+| `obstacles` | `Position[]` | 静态障碍物坐标数组。 |
 
-**CommandResponse**
-
-| 字段 | 类型 | 必填 | 含义 |
-| --- | --- | --- | --- |
-| `commandId` | string | 是 | 当前进程内唯一的命令定位符，可由序列号格式化生成；不表示支持幂等重试。 |
-| `type` | string enum | 是 | 回显实际执行的 `MOVE` 或 `RESET`。 |
-| `result` | string enum | 是 | `MOVED`、`BLOCKED_BOUNDARY` 或 `RESET`。 |
-| `robot` | RobotState | 是 | 本条命令完整处理后的原子状态快照。 |
-
-**统一错误结构**
+**RobotState**
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `error.code` | string | 稳定的机器可读错误码。 |
-| `error.message` | string | 简洁、可读的说明，不含内部堆栈。 |
-| `error.details` | object | 可选，指出字段和允许值等。 |
-| `error.requestId` | string | 一次 HTTP 请求的标识，便于对照服务日志。 |
+| `robotId` | string | 当前固定 `robot-1`。 |
+| `instanceId` | string | 当前服务进程实例。 |
+| `position` | `{x,y}` | 当前整数网格位置。 |
+| `heading` | enum | `UP`、`DOWN`、`LEFT`、`RIGHT`。 |
+| `motionStatus` | enum | `IDLE` 或 `BLOCKED`。 |
+| `lastResult` | enum | `NONE`、`MOVED`、`BLOCKED_BOUNDARY`、`BLOCKED_OBSTACLE`、`RESET`、`PATROL_STARTED`、`PATROL_STOPPED`、`PATROL_COMPLETED`。 |
+| `sequence` | integer | 当前实例的状态序列号。 |
+| `patrolActive` | boolean | 是否正在自动巡检。 |
 
-#### 4.2.4 获取地图
-
-**请求**
-
-```http
-GET /api/v1/map HTTP/1.1
-Host: localhost:8080
-Accept: application/json
-```
-
-**200 响应示例**
+**CommandRequest**
 
 ```json
-{
-  "mapId": "grid-20x20",
-  "width": 20,
-  "height": 20,
-  "origin": "TOP_LEFT",
-  "xAxis": "RIGHT",
-  "yAxis": "DOWN"
-}
+{ "type": "MOVE", "direction": "RIGHT" }
 ```
 
-**约束**：
-
-- `width`、`height` 为正整数，允许范围 `1 .. 100`。
-- 本阶段没有障碍物数组、巡检点或传感器区域。
-- 地图运行期间只读；修改配置需重启服务。
-
-#### 4.2.5 获取机器人状态
-
-**请求**
-
-```http
-GET /api/v1/robot HTTP/1.1
-Accept: application/json
-```
-
-**200 响应示例**
+或：
 
 ```json
-{
-  "robotId": "robot-1",
-  "instanceId": "srv-01JCEXAMPLE7E8W3N2Q4",
-  "position": {
-    "x": 1,
-    "y": 0
-  },
-  "heading": "RIGHT",
-  "motionStatus": "IDLE",
-  "lastResult": "MOVED",
-  "sequence": 1
-}
+{ "type": "RESET" }
 ```
 
-该接口是页面初始化、断连恢复和轮询的唯一状态来源。响应必须是一个互斥保护下取得的完整快照，不能拼接来自不同命令时刻的字段。
+`START_PATROL`、`STOP_PATROL` 与 `RESET` 一样只允许 `type` 字段；只有 `MOVE` 允许且必须携带 `direction`。未知字段、错误类型和错误枚举均拒绝。
 
-#### 4.2.6 创建移动命令
+**CommandResponse**
 
-**请求**
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `commandId` | string | 由当前序列号格式化生成，不承诺唯一。 |
+| `type` | enum | 实际命令类型。 |
+| `result` | enum | 第 4.4 节中的命令结果。 |
+| `robot` | RobotState | 命令处理后的状态快照。 |
 
-```http
-POST /api/v1/robot/commands HTTP/1.1
-Content-Type: application/json
-Accept: application/json
-
-{
-  "type": "MOVE",
-  "direction": "RIGHT"
-}
-```
-
-**请求字段**
-
-| 字段 | 类型 | 必填 | 校验 |
-| --- | --- | --- | --- |
-| `type` | string | 是 | 移动时固定为 `MOVE`。 |
-| `direction` | string | 是 | 只能为 `UP`、`DOWN`、`LEFT`、`RIGHT`，大小写敏感。 |
-
-**201 成功移动响应示例**
-
-```json
-{
-  "commandId": "cmd-00000001",
-  "type": "MOVE",
-  "result": "MOVED",
-  "robot": {
-    "robotId": "robot-1",
-    "instanceId": "srv-01JCEXAMPLE7E8W3N2Q4",
-    "position": {
-      "x": 1,
-      "y": 0
-    },
-    "heading": "RIGHT",
-    "motionStatus": "IDLE",
-    "lastResult": "MOVED",
-    "sequence": 1
-  }
-}
-```
-
-**201 边界阻止响应示例**
-
-前置条件：机器人位于 `(0, 0)`，收到 `MOVE / UP`。
-
-```json
-{
-  "commandId": "cmd-00000002",
-  "type": "MOVE",
-  "result": "BLOCKED_BOUNDARY",
-  "robot": {
-    "robotId": "robot-1",
-    "instanceId": "srv-01JCEXAMPLE7E8W3N2Q4",
-    "position": {
-      "x": 0,
-      "y": 0
-    },
-    "heading": "UP",
-    "motionStatus": "BLOCKED",
-    "lastResult": "BLOCKED_BOUNDARY",
-    "sequence": 2
-  }
-}
-```
-
-**边界响应为何是 201 而非 4xx**：请求格式有效，服务端已经创建并处理了一条命令；越界阻止是正常仿真结果。响应明确给出 `result = BLOCKED_BOUNDARY`，前端不得将其显示为网络错误。
-
-#### 4.2.7 创建重置命令
-
-**请求**
-
-```json
-{
-  "type": "RESET"
-}
-```
-
-`RESET` 不允许携带 `direction`，也不需要任何目标坐标。
-
-**201 响应示例**
-
-```json
-{
-  "commandId": "cmd-00000003",
-  "type": "RESET",
-  "result": "RESET",
-  "robot": {
-    "robotId": "robot-1",
-    "instanceId": "srv-01JCEXAMPLE7E8W3N2Q4",
-    "position": {
-      "x": 0,
-      "y": 0
-    },
-    "heading": "RIGHT",
-    "motionStatus": "IDLE",
-    "lastResult": "RESET",
-    "sequence": 3
-  }
-}
-```
-
-重置是原子操作：恢复配置中的位置、朝向、`IDLE` 和 `lastResult = RESET`，同时 `sequence + 1`；`instanceId` 不变。
-
-#### 4.2.8 健康检查
-
-**200 响应示例**
-
-```json
-{
-  "status": "ok",
-  "instanceId": "srv-01JCEXAMPLE7E8W3N2Q4"
-}
-```
-
-配置加载或核心初始化失败时进程应直接退出并输出明确错误，而不是启动一个始终返回健康的空服务。健康检查只用于基础可用性，不扩展为复杂监控系统。
-
-#### 4.2.9 错误码与失败示例
-
-| HTTP 状态 | 错误码示例 | 触发条件 | 状态是否变化 |
-| --- | --- | --- | --- |
-| 400 | `MALFORMED_JSON` | JSON 无法解析或根节点不是对象 | 否 |
-| 400 | `MISSING_FIELD` | 缺少 `type`，或 MOVE 缺少 `direction` | 否 |
-| 400 | `INVALID_COMMAND_TYPE` | `type` 不是 MOVE／RESET | 否 |
-| 400 | `INVALID_DIRECTION` | direction 不在允许枚举内 | 否 |
-| 400 | `UNKNOWN_FIELD` | 出现未定义字段 | 否 |
-| 413 | `PAYLOAD_TOO_LARGE` | 请求体超过服务端限制 | 否 |
-| 404 | `ROUTE_NOT_FOUND` | 路径不存在 | 否 |
-| 405 | `METHOD_NOT_ALLOWED` | 资源存在但 HTTP 方法不支持 | 否 |
-| 415 | `UNSUPPORTED_MEDIA_TYPE` | POST 的 Content-Type 不是 JSON | 否 |
-| 500 | `INTERNAL_ERROR` | 未预期服务端错误 | 不得暴露部分写入；应记录日志 |
-
-**400 示例**
+**统一错误**
 
 ```json
 {
   "error": {
     "code": "INVALID_DIRECTION",
-    "message": "direction must be one of UP, DOWN, LEFT, RIGHT",
+    "message": "direction 必须是 UP/DOWN/LEFT/RIGHT 之一",
     "details": {
       "field": "direction",
       "allowed": ["UP", "DOWN", "LEFT", "RIGHT"]
     },
-    "requestId": "req-01JCEXAMPLE9C4M7K8P2"
+    "requestId": "req-00000001"
   }
 }
 ```
 
-**统一错误要求**：
+`details` 可省略；不得向前端返回堆栈、源码路径或依赖内部细节。
 
-- 405 响应应带正确的 `Allow` 头，例如地图资源只允许 `GET, HEAD`（若实现 HEAD）。
-- 参数校验失败时不进入仿真模块，不占用命令序列号。
-- 500 不返回异常堆栈；简单文本日志记录 `requestId`、路径、状态码和失败原因。
-- 不得把“非法输入”返回成 200，也不得把正常边界阻止伪装成 500。
+### 4.8 当前错误契约
 
-### 4.3 仿真引擎需求
-
-#### 4.3.1 网格坐标系
-
-- 原点 `(0, 0)` 位于地图**左上角**。
-- x 是列号，向右递增；有效范围 `0 <= x < width`。
-- y 是行号，向下递增；有效范围 `0 <= y < height`。
-- 坐标为整数，不存在半格位置。
-- 默认地图 `width = 20`、`height = 20`，因此有效坐标为 `0 .. 19`。
-- 本阶段所有单元格均可通行，没有障碍物和特殊地形。
-- 机器人占据一个完整单元格；地图边界就是允许坐标的矩形范围。
-
-#### 4.3.2 方向增量
-
-| direction | dx | dy | 说明 |
-| --- | ---: | ---: | --- |
-| `UP` | 0 | -1 | y 减小 |
-| `DOWN` | 0 | +1 | y 增大 |
-| `LEFT` | -1 | 0 | x 减小 |
-| `RIGHT` | +1 | 0 | x 增大 |
-
-#### 4.3.3 移动与边界规则
-
-对每条合法 `MOVE` 命令，必须按以下顺序处理：
-
-1. 读取当前位置 `(x, y)`；
-2. 将 `heading` 设置为命令方向；
-3. 根据方向表计算候选位置 `(nextX, nextY) = (x + dx, y + dy)`；
-4. 判断候选位置是否满足 `0 <= nextX < width && 0 <= nextY < height`；
-5. **在界内**：更新位置，`motionStatus = IDLE`，`lastResult = MOVED`；
-6. **越界**：保持位置不变，`motionStatus = BLOCKED`，`lastResult = BLOCKED_BOUNDARY`；
-7. 两种结果都属于已处理命令，`sequence + 1`。
-
-**朝向约定**：即使移动被边界阻止，朝向仍更新为命令方向。例如 `(0,0)` 收到 UP 后仍为 `(0,0)`，但朝向为 UP。该约定必须在前端提示、API 示例和测试中保持一致。
-
-**恢复约定**：边界阻止不是锁死状态。下一次合法移动若成功进入界内，状态恢复 `IDLE`；无需额外“解除阻塞”操作。
-
-#### 4.3.4 核心伪代码
-
-```cpp
-// 规格伪代码：展示规则顺序，不限定具体代码格式。
-MoveResult applyManualMove(Direction direction, const Grid& grid) {
-    heading = direction;
-    const Position candidate = position + delta(direction);
-
-    if (!grid.contains(candidate)) {
-        motionStatus = MotionStatus::Blocked;
-        lastResult = LastResult::BlockedBoundary;
-        return MoveResult::BlockedBoundary;
-    }
-
-    position = candidate;
-    motionStatus = MotionStatus::Idle;
-    lastResult = LastResult::Moved;
-    return MoveResult::Moved;
-}
-```
-
-`sequence`、`commandId` 和 `instanceId` 由控制模块维护，不放入纯几何判断中。API 枚举字符串与 C++ 枚举之间的转换应集中在边界层，禁止使用随意整数值表示方向。
-
-#### 4.3.5 初始状态与配置
-
-服务启动完成后的状态必须为：位置与朝向取自配置，`motionStatus = IDLE`、`lastResult = NONE`、`sequence = 0`，并生成新的 `instanceId`。
-
-`config/map.json` 的建议结构：
-
-```json
-{
-  "mapId": "grid-20x20",
-  "width": 20,
-  "height": 20,
-  "initialRobot": {
-    "x": 0,
-    "y": 0,
-    "heading": "RIGHT"
-  }
-}
-```
-
-启动校验：
-
-- JSON 必须可解析，必填字段齐全；
-- `mapId` 非空；
-- `width`、`height` 为整数且在允许范围内；
-- 初始 `x`、`y` 在地图内；
-- 初始朝向属于四个允许值；
-- 校验失败时进程非零退出，日志指出具体配置字段；
-- 配置中不得出现另一套运行时状态副本，运行状态只存在于内存。
-
-#### 4.3.6 C++ 类与接口边界建议
-
-```text
-Position                  值对象：x、y
-Direction                 枚举：Up、Down、Left、Right
-MotionStatus              枚举：Idle、Blocked
-LastResult                枚举：None、Moved、BlockedBoundary、Reset
-MoveResult                枚举：Moved、BlockedBoundary
-Grid::contains(Position)  只判断坐标是否在矩形范围内
-Robot::applyManualMove()  只执行一次离散移动规则
-Robot::reset()            恢复给定初始姿态
-RobotController::execute() 校验后的命令执行、互斥、序列号、快照
-RobotController::snapshot() 返回一致的状态副本
-```
-
-依赖方向必须为：
-
-```text
-API -> Control -> Domain
-API -> JSON DTO 映射
-Control -> Domain
-Domain -X-> API / Crow / nlohmann-json / Canvas
-```
-
-#### 4.3.7 仿真与契约测试用例
-
-| 用例 | 前置状态 | 操作 | 预期 |
+| HTTP | 错误码 | 触发条件 | 状态变化 |
 | --- | --- | --- | --- |
-| SIM-01 | `(5,5), RIGHT` | UP | `(5,4), UP, MOVED, IDLE` |
-| SIM-02 | `(5,5), UP` | DOWN | `(5,6), DOWN, MOVED, IDLE` |
-| SIM-03 | `(5,5), RIGHT` | LEFT | `(4,5), LEFT, MOVED, IDLE` |
-| SIM-04 | `(5,5), LEFT` | RIGHT | `(6,5), RIGHT, MOVED, IDLE` |
-| SIM-05 | `(0,5), RIGHT` | LEFT | `(0,5), LEFT, BLOCKED` |
-| SIM-06 | `(19,5), LEFT` | RIGHT，默认 20 列 | `(19,5), RIGHT, BLOCKED` |
-| SIM-07 | `(5,0), RIGHT` | UP | `(5,0), UP, BLOCKED` |
-| SIM-08 | `(5,19), DOWN` | DOWN，默认 20 行 | `(5,19), DOWN, BLOCKED` |
-| SIM-09 | `(0,0), BLOCKED` | RIGHT | `(1,0), RIGHT, MOVED, IDLE` |
-| SIM-10 | 任意合法状态 | RESET | 恢复配置初态，sequence 加 1 |
-| SIM-11 | 任意状态 | 非法 API direction | 状态与 sequence 均不变 |
-| SIM-12 | 四个角点 | 分别尝试两个越界方向 | 位置始终在界内，朝向与结果符合规则 |
+| 400 | `MALFORMED_JSON` | JSON 无法解析或根节点不是对象 | 否 |
+| 400 | `MISSING_FIELD` | 缺少 `type`，或 MOVE 缺少 `direction` | 否 |
+| 400 | `INVALID_COMMAND_TYPE` | 不支持的命令类型 | 否 |
+| 400 | `INVALID_DIRECTION` | 非四方向枚举或类型错误 | 否 |
+| 400 | `UNKNOWN_FIELD` | 出现该命令不允许的字段 | 否 |
+| 413 | `PAYLOAD_TOO_LARGE` | 请求体超过 4096 字节 | 否 |
+| 404 | `ROUTE_NOT_FOUND` | 未知 API 路径 | 否 |
+| 405 | `METHOD_NOT_ALLOWED` | 已知资源不支持该方法，带 `Allow` | 否 |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | POST Content-Type 不是 JSON | 否 |
+| 500 | `INTERNAL_ERROR` | 未预期服务端错误 | 不暴露内部细节 |
 
-另需验证：从初始点执行固定命令序列后，Python 集成测试得到的最终状态与 C++ 单元测试的预期完全一致。
+边界和障碍物阻挡是已受理命令的正常业务结果，因此返回 201，不得误报为网络错误或 500。
 
-**用例归属**：SIM-01 至 SIM-09、SIM-12 是 A 的纯 Domain 单元测试；SIM-10 由 D 在 Controller 测试中验证序列号、A 验证 Domain 重置；SIM-11 由 D 在 API 校验层测试。E 对能经公开 API 构造的场景做黑盒复核，不为了测试而增加“直接设置坐标”的生产接口。
+### 4.9 当前前端行为
 
----
-
-## 5. 非功能性需求
-
-### 5.1 质量、性能与可维护性
-
-| 类别 | 基础版要求 | 验证方式 |
-| --- | --- | --- |
-| 响应性能 | 本机容器已启动、单用户条件下，100 次顺序状态／移动请求的 P95 服务端响应时间建议不超过 200 ms | Python 测试记录耗时；不作为公网 SLA |
-| 操作反馈 | 正常本地运行时，点击到页面更新建议不超过 500 ms | 手工验收与浏览器网络记录 |
-| 状态新鲜度 | 自发命令立即更新；其他状态变化在页面可见时通常 1 秒内被轮询反映 | 双客户端或手工命令验证 |
-| 浏览器兼容 | 当前稳定版 Chrome、Edge、Firefox；不要求 IE | 至少在一个 Chromium 浏览器完整验收，并在 Firefox 完成地图加载、四方向、边界和重置冒烟 |
-| 资源环境 | 普通学生电脑可开发；建议至少 2 核 CPU、4 GB 可用内存用于构建和容器 | 干净环境启动验证 |
-| 可靠性 | 单条命令原子完成；失败输入不产生部分状态；重启恢复确定初态 | 单元／集成测试和重启测试 |
-| 可维护性 | Domain 不依赖 Web 框架；API DTO 与领域类型分离；函数职责单一 | Code Review 和依赖方向检查 |
-| 可观测性 | 控制台输出启动端口、配置结果、请求错误和必要命令结果；不记录敏感信息 | 查看容器日志 |
-| 安全基线 | 非 root 容器用户；不提交密钥；限制请求体；不泄露堆栈；不默认开放任意 CORS | 配置审查与异常请求 |
-| 可访问性 | 原生按钮、键盘焦点、文字状态、非纯颜色反馈、窄屏可操作 | 键盘走查和页面检查 |
-| 持久化边界 | 明确声明内存状态和重启重置行为，不让用户误以为有历史记录 | README 与页面帮助说明 |
-
-基础版不承诺公网高并发、数据持久化或多用户隔离。若提供在线演示，应在 README 标明这是单机器人课程演示，并优先使用平台提供的 HTTPS 入口。
-
-### 5.2 Git 分支管理规范
-
-#### 5.2.1 仓库要求
-
-1. 使用团队自己的可访问仓库，不直接向模板仓库推送。
-2. 首次推送前执行 `git remote -v`，确认 `origin` 是团队仓库。
-3. 默认分支统一为 `main`，保护 `main`，禁止直接推送和强制推送共享分支。
-4. 所有功能通过短期任务分支和 PR 合入；一个分支只解决一个明确任务。
-5. 开始新任务前先同步 `main`，减少长期分支冲突。
-
-#### 5.2.2 分支命名
-
-```text
-feat/<scope>-<short-description>
-fix/<scope>-<short-description>
-docs/<short-description>
-test/<short-description>
-ci/<short-description>
-chore/<short-description>
-```
-
-示例：
-
-```text
-feat/frontend-canvas-grid
-feat/backend-manual-command
-feat/sim-boundary-check
-test/python-api-smoke
-ci/base-checks
-chore/docker-base-image
-docs/readme-quickstart
-```
-
-#### 5.2.3 合并规则
-
-- PR 至少由 **1 名非作者成员**审查；涉及 API 契约时，全栈、C++ API、算法和测试负责人中至少相关三方确认。
-- CI 必需检查全部通过后才可合并。
-- 冲突由相关成员共同核对，不得为求快直接删除他人逻辑。
-- 推荐每个任务分支使用 squash merge，使 `main` 上的一项任务对应一个清晰提交；PR 内仍保留开发过程和审查记录。
-- 合并后删除已完成的远端短分支。
-- 交付时可创建 `v0.1.0-base` 标签，指向实际验收提交。
-
-### 5.3 Commit 规范
-
-采用 Conventional Commits 的简化形式：
-
-```text
-<type>(<scope>): <subject>
-
-<可选正文：为什么修改、重要行为变化>
-<可选 footer：关联 Issue / PR>
-```
-
-| type | 用途 |
-| --- | --- |
-| `feat` | 新增基础版功能 |
-| `fix` | 修复缺陷 |
-| `docs` | 仅文档变更 |
-| `test` | 测试新增或调整 |
-| `refactor` | 不改变外部行为的重构 |
-| `style` | 格式调整 |
-| `build` | 构建或依赖调整 |
-| `ci` | CI 配置调整 |
-| `chore` | 其他杂项 |
-| `revert` | 回退提交 |
-
-推荐 scope：`frontend`、`backend`、`sim`、`api`、`docker`、`ci`、`docs`。
-
-示例：
-
-```text
-feat(sim): 添加四方向单格移动规则
-fix(backend): 阻止越界命令改变位置
-test(api): 覆盖边界阻止与非法方向
-docs: 补充 Docker 一键启动步骤
-```
-
-**提交纪律**：
-
-- 标题写具体结果，不使用 `update`、`fix bug`、`123` 等无信息标题。
-- 每次提交只包含一个逻辑改动；生成文件、依赖目录和本地配置不得混入。
-- 提交前查看差异并运行与改动相关的最小检查。
-- `.gitignore` 至少排除 `node_modules/`、前端 `dist/`、C++ 构建目录、`.venv/`、`__pycache__/`、测试缓存、IDE 私有文件和 `.env`。
-- `.env.example` 可提交但不能包含真实秘密；本阶段默认不需要密钥。
-
-### 5.4 Pull Request 与 Definition of Done
-
-每个 PR 必须写明：
-
-1. 变更目的和范围；
-2. 关联需求编号或任务；
-3. 实际执行的命令和结果，不能只写“已测试”；
-4. UI 变更附截图或简短录屏；
-5. 是否影响 API、配置、启动方式或 README；
-6. 已知限制和需要审查者重点关注的位置。
-
-一项任务只有同时满足以下条件才算完成：代码已合入、相关测试通过、CI 通过、文档已同步、审查意见已处理、没有夹带范围外功能。
-
-### 5.5 根 README 必须包含的章节
-
-README 面向首次访问项目的人，必须给出真实可执行内容，不能保留模板中的 `XXX`：
-
-1. **项目名称与一句话简介**；
-2. **在线演示**：若已部署，将真实 URL 放在文档前部；未部署则明确写“未部署”，不得放假链接；
-3. **基础版功能列表与范围声明**；
-4. **实际技术栈**；
-5. **项目架构图和数据流说明**；
-6. **目录结构**；
-7. **环境前置要求**：Git、编译器、CMake、Node、Python、Docker 的实际版本；
-8. **本地开发启动**：后端、前端和代理配置，注明启动顺序、端口和入口；
-9. **Docker 一键启动、查看状态、查看日志和停止命令**；
-10. **API 摘要与可执行请求示例**：至少地图、状态、移动和错误示例；
-11. **测试与 CI**：C++、前端、Python 的命令，以及 Actions 结果位置；
-12. **配置说明**：地图尺寸和初始状态的唯一配置文件；
-13. **验收操作指南**：一次成功移动、一次边界阻止和一次重置；
-14. **成果展示**：真实截图、GIF／视频链接和预期演示步骤；
-15. **五位成员实际分工与贡献证据**：代码路径、PR 链接、测试／部署／文档成果；
-16. **已知限制**：单机器人、内存状态、无数据库、手动控制及本阶段非目标；
-17. **相关文档链接与许可证**。
-
-### 5.6 编码与测试规范
-
-- C++ 使用统一格式化配置；启用 `-Wall -Wextra -Wpedantic`（MSVC 使用等价警告），不以大量警告换取“构建成功”。
-- 优先使用值对象、`enum class`、RAII 和 const 正确性；避免无必要全局可变变量。
-- C++ Domain 单元测试不启动 HTTP 服务；API 集成测试不直接 include Domain 来代替黑盒验证。
-- TypeScript 开启严格模式；不得用大片 `any` 绕过 API 契约。
-- Python 测试通过 fixture 等待健康检查，等待必须有超时，禁止固定长时间 sleep 作为唯一同步方式。
-- 每个缺陷修复应附能复现该缺陷的测试或明确的回归验证记录。
-- 测试失败时修复根因，不得简单删除断言、跳过边界用例或把错误结果改成新的期望值。
+1. 初始化并行请求地图和机器人状态；失败最多尝试 3 次，每次间隔 1 秒，仍失败则断连。
+2. 命令成功后立即用响应中的 `robot` 重绘，不等待下一次轮询。
+3. 页面可见时每 1000 ms 查询机器人，隐藏时暂停，重新可见时立即查询。
+4. 同实例下忽略较小 `sequence` 的迟到快照；`instanceId` 变化时清空旧机器人状态，重新加载地图和状态。
+5. 轮询连续失败 3 次进入 `DISCONNECTED`；失败期间保留最后确认数据并标记异常。
+6. POST 不自动重试；超时或失败后先 GET 真实状态，避免重复执行一次点击。
+7. 当前 UI 状态为 `LOADING`、`READY`、`EXECUTING`、`BOUNDARY_FEEDBACK`、`DEGRADED`、`DISCONNECTED`；内部名称 `BOUNDARY_FEEDBACK` 同时覆盖边界和障碍反馈。
+8. 执行期间禁用方向、重置和巡检按钮；巡检按钮文案随 `patrolActive` 切换。
+9. Canvas 使用 `(x + 0.5) * cellSize`、`(y + 0.5) * cellSize` 计算中心，默认 `cellSize = 32`；高 DPI 只缩放 backing store，不改变逻辑坐标。
+10. 控件使用原生按钮，状态有文字反馈；窄屏布局不得裁切主要控制。
 
 ---
 
-## 6. 部署与交付要求
+## 5. 架构优化设计 `[规划]`
 
-### 6.1 部署拓扑与配置
+### 5.1 优化目标与原则
 
-**容器内只运行一个 C++ 应用进程**：
+当前分层已经具备基础，但控制器同时管理互斥、序列号、巡检路径和线程，HTTP 路由重复处理方法和错误，前端 `main.ts` 同时管理多种计时器。后续优化应解决这些具体复杂度，而不是重写系统。
 
-- 监听 `0.0.0.0:8080`；
-- `/` 返回前端静态构建产物；
-- `/api/v1/*` 提供 REST API；
-- 地图配置从 `MAP_CONFIG` 指定的路径读取，容器内固定为 `/app/config/map.json`；
-- 前端静态根目录从 `STATIC_ROOT` 读取，容器内固定为 `/app/web`；
-- 日志输出到 stdout／stderr；
-- 不安装生产数据库，不挂载状态卷，不包含 Python 运行时。
+目标：
 
-宿主机端口由 `HOST_PORT` 决定，默认 `8080`。容器内部端口固定 8080，避免宿主端口和应用监听配置形成两套不一致来源。
+- 让纯 Domain 和感知规则可在无 Crow、无 Boost、无浏览器环境下测试；
+- 明确机器人状态、巡检线程、感知事件各自的唯一所有者；
+- 避免在状态锁内做全图规划、文件 I/O、网络请求或线程 `join`；
+- 防止过期规划结果、迟到 HTTP 响应和重复观察覆盖新状态；
+- 保持模块化单体、现有 API 和自动巡检外部行为不变。
 
-### 6.2 Dockerfile 编写要求
+不采用微服务、独立感知容器、数据库、消息总线、WebSocket 或通用插件框架作为本次优化前提。
 
-Dockerfile 必须满足：
+### 5.2 目标逻辑架构
 
-1. 使用多阶段构建：前端构建、C++ 构建、精简运行时三个阶段；
-2. 先复制依赖清单再复制源码，以利用构建缓存；
-3. 前端使用 `npm ci`，禁止在构建时隐式修改 lockfile；
-4. C++ 使用 Release 构建，并在构建阶段运行 CTest；
-5. 第三方 C++ 依赖必须锁版本，构建失败应立即使镜像构建失败；
-6. 运行时只复制可执行文件、前端 `dist` 和地图配置，不带编译工具链、node_modules 或测试缓存；
-7. 安装健康检查所需的最小工具及证书，清理 apt 缓存；
-8. 创建固定 UID 的非 root 用户并以其运行；
-9. 声明 `EXPOSE 8080`，使用 exec 形式启动进程；
-10. 提供 `.dockerignore`，排除 `.git`、依赖目录、构建产物、虚拟环境、本地秘密和参考资料。
+```mermaid
+flowchart TB
+    subgraph Web["浏览器"]
+        UI["页面与感知面板"]
+        Reducer["纯 UI Reducer"]
+        Poll["可见性轮询与单飞请求"]
+        APIClient["统一 API Client"]
+        UI --> Reducer --> Poll --> APIClient
+    end
 
-**参考骨架**（实际 CMake 目标名和依赖安装可在不违背上述要求时调整）：
+    subgraph App["模块化单体 C++"]
+        API["API 层<br/>路由 / 校验 / DTO / 错误映射"]
+        Controller["RobotController 外观<br/>Robot、sequence、互斥、快照"]
+        Executor["PatrolExecutor<br/>线程、停止通知、路径游标"]
+        Planner["现有 PatrolPlanner<br/>纯函数，不改策略"]
+        Perception["PerceptionService<br/>观察去重、活动检测、环形事件缓冲"]
+        Rules["纯感知规则<br/>网格测距 / 异常源检测"]
+        Config["只读 Map + Perception Config"]
 
-```dockerfile
-FROM node:22-bookworm-slim AS web-build
-WORKDIR /src/frontend
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
-COPY frontend/ ./
-RUN npm run build
+        API --> Controller
+        Controller --> Executor
+        Executor --> Planner
+        Controller -->|"已确认的不可变快照"| Perception
+        Executor -->|"每个已确认巡检步快照"| Perception
+        Perception --> Rules
+        Rules --> Config
+        API -->|"只读查询"| Perception
+    end
 
-FROM gcc:12-bookworm AS cpp-build
-WORKDIR /src
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends cmake ninja-build git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-COPY backend/ ./backend/
-RUN cmake -S backend -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-    && cmake --build build --parallel \
-    && ctest --test-dir build --output-on-failure
-
-FROM debian:bookworm-slim AS runtime
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates libstdc++6 \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --create-home app
-WORKDIR /app
-COPY --from=cpp-build /src/build/patrol_server ./patrol_server
-COPY --from=web-build /src/frontend/dist ./web
-COPY config/ ./config/
-USER app
-EXPOSE 8080
-ENTRYPOINT ["/app/patrol_server"]
+    APIClient --> API
 ```
 
-**构建一致性注意**：C++ 构建基础镜像和运行镜像应保持同一 Debian 发行版，避免 `libstdc++`／glibc 版本不匹配。若改用更新编译器，必须同时验证运行时动态库，而不是只确认编译通过。镜像构建后应执行 `docker run --rm --entrypoint ldd patrol-sim-base:local /app/patrol_server`，确认输出中没有 `not found`；该诊断不能替代实际启动和健康检查。
+虚线语义上，感知是**状态观察者**，不是控制决策者。`PerceptionService` 不得回调 `START_PATROL`、`MOVE` 或重规划接口。
 
-### 6.3 Docker Compose 一键启动要求
+### 5.3 状态所有权
 
-```yaml
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: patrol-sim-base:local
-    ports:
-      - "${HOST_PORT:-8080}:8080"
-    environment:
-      APP_HOST: 0.0.0.0
-      APP_PORT: "8080"
-      MAP_CONFIG: /app/config/map.json
-      STATIC_ROOT: /app/web
-    restart: unless-stopped
-    init: true
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/v1/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 30s
+| 数据／资源 | 唯一写入者 | 读取方式 | 并发约束 |
+| --- | --- | --- | --- |
+| 机器人位置、朝向、运动结果、`sequence` | `RobotController` | 一致快照 | 所有写入经过控制器互斥。 |
+| 巡检活动标志、路径和游标 | 控制器内的巡检执行组件 | 随机器人快照读取 | 状态变更与停止代际一致。 |
+| 巡检线程、条件变量、停止通知 | `PatrolExecutor` | 不对外暴露线程 | 不得在持有机器人状态锁时 join。 |
+| 最新观察、活动检测、事件缓冲 | `PerceptionService` | 按实例和序列号读取 | 自己的短锁；不得与控制锁形成反向嵌套。 |
+| 地图与异常源配置 | 启动组装阶段 | 只读引用或不可变值 | 运行中不得修改。 |
+| 前端机器人与感知视图 | 纯 Reducer | 当前 UI State | 仅接受符合实例和序号规则的数据。 |
+
+`RobotController` 可保留为现有调用的外观，内部再提取执行器，避免 API 层直接管理线程。感知采样接收完整、不可变的快照，不读取“移动一半”的领域对象。
+
+### 5.4 CMake 与依赖优化
+
+目标依赖关系：
+
+```text
+patrol_domain          -> 仅 C++ 标准库
+patrol_perception      -> patrol_domain
+patrol_control         -> patrol_domain（感知通知通过应用层或回调接口连接）
+patrol_api             -> patrol_control + patrol_perception + Crow + json + Boost
+patrol_server          -> patrol_api + 配置加载 + 依赖组装
+domain_tests           -> patrol_domain + GoogleTest
+perception_tests       -> patrol_perception + GoogleTest
+controller_tests       -> patrol_control（及必要的感知测试组装）
 ```
 
 要求：
 
-- 使用 Compose v2 的 `docker compose` 命令，不写已废弃的 `version` 顶级字段；
-- 不依赖本机源码路径才能运行；
-- 无需手工先启动数据库或其他服务；
-- 健康检查失败时 `docker compose ps` 能体现异常，日志能帮助定位；
-- 停止服务使用 `docker compose down`；由于无持久化状态，不需要数据卷；
-- 如果 `HOST_PORT` 被占用，README 应说明替代方式：Linux／macOS 使用 `HOST_PORT=8081 docker compose up --build -d`，Windows PowerShell 先执行 `$env:HOST_PORT = "8081"` 再执行 `docker compose up --build -d`，验收地址同步改为 `http://127.0.0.1:8081`。
+1. Domain 测试链接时不依赖 Crow／Boost／HTTP 服务。
+2. `patrol_perception` 是纯规则和值对象优先的库，不包含 Crow 路由。
+3. 使用 CTest／`BUILD_TESTING` 管理测试依赖；运行镜像仍只复制应用和必要资源。
+4. 现有测试可以调整目标归属，但不得删除或放松原有断言来迁就重构。
+5. 不为“未来可能替换算法”提前引入动态插件加载。
 
-### 6.4 启动与验证命令契约
+### 5.5 控制与线程优化
 
-实现完成后，README 至少应提供并实际验证以下等价命令。
+| 编号 | 设计要求 |
+| --- | --- |
+| AR-CON-001 | Crow 工作线程和巡检线程都只能通过控制器修改 Robot，禁止共享对象的无锁读写。 |
+| AR-CON-002 | 全图规划在锁外执行；为每次启动／停止／接管分配内部 `patrolGeneration`，重新加锁后核对代际和起点，过期结果直接丢弃。 |
+| AR-CON-003 | 不得在重新持锁后再次执行全图重规划；如状态已变化，应按当前代际重新发起或退出，而不是阻塞所有 GET。 |
+| AR-CON-004 | 停止先更新活动状态和代际、通知条件变量，再在锁外 join；析构也必须执行同一停止路径。 |
+| AR-CON-005 | 命令、自动步和感知通知使用已确认快照；同一 `(instanceId, sequence)` 的观察最多入库一次。 |
+| AR-CON-006 | 控制器锁和感知锁不得相互嵌套调用；感知查询不得等待全图规划完成。 |
+| AR-CON-007 | 保留确定性 `patrolStep()` 测试入口或等价内部驱动，测试不能依赖长时间固定 sleep。 |
 
-**Docker 验收路径（主路径）**：
+内部 `patrolGeneration` 不进入当前 API，不改变 `sequence` 规则，也不作为前端新契约。
 
-```bash
-docker compose up --build -d
-docker compose ps
-curl -fsS http://127.0.0.1:8080/api/v1/health
-curl -fsS http://127.0.0.1:8080/api/v1/robot
-docker compose logs --no-color app
-docker compose down
+### 5.6 API 与前端编排优化
+
+**API 层**：
+
+- 抽取通用的 GET／HEAD 方法检查、JSON 响应、405 和统一错误映射，减少路由复制。
+- 按资源组织 health、map、robot、perception 路由；共享统一的 DTO 校验边界。
+- 新查询参数按字符串解析并显式检查完整数字、范围，禁止 `atoi` 静默把非法值变成 0。
+- 保持 `/api/v1` 的兼容性；新增只读资源不要求把现有接口升级为 v2。
+
+**前端**：
+
+- 将“请求是否进行中、页面是否可见、失败次数、重载”从 DOM 渲染中分离，避免重复定时器和轮询重叠。
+- 机器人轮询与感知轮询共享可见性策略，但感知故障不得把仍可用的手动／巡检功能标记为断连。
+- 所有响应先检查 `instanceId`，再检查各自的 `sequence`／`eventId`；地图、机器人和感知不得来自不同实例。
+- `state.ts` 保持可单测的纯归约；副作用由编排层执行，Canvas 只消费只读视图模型。
+
+### 5.7 可观测性与性能验证
+
+- 日志至少包含启动配置摘要、实例标识、命令类型／结果、巡检启动／停止／完成、感知配置结果、请求错误和部署版本。
+- 不记录请求秘密、完整无关请求体或内部堆栈；HTTP 错误继续使用 `requestId` 关联。
+- 重构前在默认 30×30 地图及 100×100 测试地图记录规划耗时、GET 延迟和测试耗时；重构后以相同条件对比。
+- 架构优化主要针对**锁占用和响应阻塞**，不以更换巡检算法或缩短路径作为性能结论。
+- 在本机至少 2 核条件下，可将“100×100 规划期间连续 GET 的 P95 不超过 200 ms”作为验证目标；实测环境和结果必须记录，未测前不得宣称达到，也不将其当作公网 SLA。
+
+### 5.8 架构优化验收
+
+1. 既有 C++、前端和 Python 测试全部通过，当前 API 示例和序列号断言不变。
+2. Domain 与感知单元测试不启动 HTTP，Domain 链接依赖中不出现 Crow。
+3. 并发执行 START／STOP／MOVE／RESET 后无死锁、无遗留可 join 线程、状态始终在界内，重复 START／STOP 的序列号语义不变。
+4. 在规划中持续读取 health／robot 可得到一致快照；无长时间持锁规划或锁内 join。
+5. 感知故障或关闭不影响现有手动和巡检 API。
+6. README 架构图、目录和实际依赖同步更新，记录前后性能数据而不是只写“已优化”。
+
+---
+
+## 6. 虚拟感知详细设计 `[规划]`
+
+### 6.1 目标、范围与原则
+
+首版虚拟感知包含两类确定性传感器和一类接触事件：
+
+1. **三向网格测距**：相对机器人朝向的前、左、右三条射线，检测最近障碍物或边界；
+2. **虚拟异常源检测**：在曼哈顿感知半径内发现配置的烟雾、高温、气体泄漏点；
+3. **接触事件**：把已确认的 `BLOCKED_BOUNDARY`、`BLOCKED_OBSTACLE` 记录为事件，区分“提前测到”和“实际被阻挡”。
+
+原则：
+
+- **确定性**：同一配置、快照和朝向得到相同结果，不使用随机噪声，便于测试和演示。
+- **观察与真值分离**：异常源配置存在于后端，普通地图 API 不暴露全部异常源；前端只显示已经发现的异常。
+- **观察与控制分离**：首版不因检测异常而停止、改道或重规划，不改变自动巡检。
+- **有界内存**：只保存最新观察和固定容量事件环形缓冲，不引入数据库。
+- **不伪装物理精度**：格数不是米，异常源等级不是物理浓度；首版不模拟遮挡衰减、误报率或传感器硬件协议。
+
+### 6.2 配置设计
+
+新增可选环境变量 `PERCEPTION_CONFIG`。未设置时 `enabled = false`，保持旧部署行为；设置后加载指定 JSON，解析或校验失败必须使进程非零退出并指出字段。启用该功能的 Compose 配置将其设为 `/app/config/perception.json`，Docker 构建复制该文件。
+
+示例：
+
+```json
+{
+  "version": 1,
+  "enabled": true,
+  "rangeCells": 3,
+  "hazardRangeCells": 2,
+  "hazards": [
+    {
+      "id": "smoke-01",
+      "type": "SMOKE",
+      "severity": "HIGH",
+      "position": { "x": 4, "y": 3 },
+      "label": "配电区域烟雾"
+    }
+  ]
+}
 ```
 
-浏览器访问 `http://127.0.0.1:8080`，完成一次移动、一次边界尝试和一次重置。
+| 字段 | 规则 |
+| --- | --- |
+| `version` | 整数，首版固定 1；未知版本拒绝。 |
+| `enabled` | boolean；即使关闭，提供的配置仍须结构合法。 |
+| `rangeCells` | 整数 `1..20`，三向测距最大格数。 |
+| `hazardRangeCells` | 整数 `0..20`；0 表示只检测机器人所在格。 |
+| `hazards` | 数组，最多 128 项，可为空。 |
+| `hazard.id` | 非空字符串，配置内唯一，建议只使用字母、数字、`-`、`_`。 |
+| `hazard.type` | `SMOKE`、`HIGH_TEMP`、`GAS_LEAK` 之一。 |
+| `hazard.severity` | `LOW`、`MEDIUM`、`HIGH` 之一，仅用于展示优先级，不改变运动。 |
+| `hazard.position` | 界内、可通行的整数坐标，不能与障碍物重合。 |
+| `hazard.label` | 可选非空字符串，最大 80 个 Unicode 字符，仅用于显示。 |
 
-**本地开发路径（辅助路径）**：
+未知字段默认拒绝。配置只在启动时读取，不提供运行中修改异常源的 API；地图和感知配置是两个独立文件，避免改变现有 `map.json` 和巡检输入。
 
-```bash
-# C++ 后端
-cmake -S backend -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
-# 启动后端可执行文件，监听 8080；具体命令写入 README
+### 6.3 三向网格测距算法
 
-# 前端，另一个终端
-cd frontend
-npm ci
-npm run dev
+相对方向随 `heading` 旋转。例如 `heading = RIGHT` 时，FRONT 为 RIGHT、LEFT 为 UP、RIGHT 为 DOWN。
 
-# Python 集成测试，在服务已启动时执行
-python -m venv .venv
-# 激活虚拟环境后
-python -m pip install -r tests/integration/requirements.txt
-pytest tests/integration -q --base-url http://127.0.0.1:8080
-```
+对每条射线：
 
-开发环境 Vite 默认端口可设为 `5173`，仅代理 `/api` 到 `http://127.0.0.1:8080`。生产验收必须检查 C++ 容器托管的页面，而不是只验证 Vite 开发页。
+1. 从机器人当前位置开始，沿绝对方向逐格前进，最多检查 `rangeCells` 格；
+2. 第一个界外格返回 `hitType = BOUNDARY`，`distanceCells` 为从机器人到该尝试格的步数，`cell = null`；
+3. 第一个障碍格返回 `hitType = OBSTACLE`，记录距离和障碍格坐标；
+4. 范围内无命中返回 `hitType = NONE`、`distanceCells = null`、`cell = null`，表示“范围内未发现”，不是无限距离；
+5. 射线命中后立即停止，不穿过障碍物继续探测；机器人所在格不重复计为障碍。
 
-### 6.5 基础 CI 流水线工作流
+相邻边界或障碍物的距离为 1。该算法是离散射线，不使用欧氏距离和浮点像素坐标。
 
-#### 6.5.1 触发与权限
+**RangeReading 模型**
 
-- 触发：所有 `pull_request`、推送到 `main`、手工 `workflow_dispatch`；
-- 权限：`contents: read`；
-- 同一 PR 新提交可取消旧运行，避免排队浪费；
-- 单个 job 设置合理超时，建议 15 分钟；
-- 三个必需检查全部成功才允许合并；
-- CI 只负责验证，不包含云端自动部署。
-
-#### 6.5.2 Job 说明
-
-| Job | 环境 | 必须步骤 | 通过证据 |
-| --- | --- | --- | --- |
-| `cpp-unit` | Ubuntu + GCC/CMake | checkout、配置、编译、CTest | 四方向、边界、重置等单元测试全部通过 |
-| `web-check` | Ubuntu + Node 22 | `npm ci`、lint、TypeScript 类型检查、前端测试、生产构建 | 无类型／lint 错误，测试通过并生成 dist |
-| `container-smoke` | Ubuntu + Docker + Python 3.12 | Compose 构建启动、等待健康、pytest、失败时收集日志、始终 down | 镜像可构建，健康检查及基础黑盒 API 流程通过 |
-
-#### 6.5.3 工作流参考骨架
-
-```yaml
-name: base-ci
-
-on:
-  pull_request:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: base-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  cpp-unit:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure
-        run: cmake -S backend -B build -DCMAKE_BUILD_TYPE=Release
-      - name: Build
-        run: cmake --build build --parallel
-      - name: Unit tests
-        run: ctest --test-dir build --output-on-failure
-
-  web-check:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-
-  container-smoke:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: tests/integration/requirements.txt
-      - run: python -m pip install -r tests/integration/requirements.txt
-      - run: docker compose up --build -d
-      - name: API integration tests
-        run: pytest tests/integration -q --base-url http://127.0.0.1:8080
-      - name: Show container logs on failure
-        if: failure()
-        run: docker compose logs --no-color
-      - name: Stop services
-        if: always()
-        run: docker compose down
-```
-
-**Python CI 细节**：`conftest.py` 必须通过 `pytest_addoption` 注册 `--base-url`（默认值 `http://127.0.0.1:8080`）并提供对应 fixture，不能只依赖 pytest 核心识别该参数；所有 HTTP 请求必须设置超时。fixture 在限定时间内轮询健康接口，健康后再执行测试，不依赖固定 sleep。每个测试需要独立初始位姿时，通过公开的 `RESET` 命令建立前置条件，并从 RESET 响应读取 `sequence` 基线；RESET 后仍为 `lastResult = RESET` 且序列号累计，不能把它当作 `NONE / sequence = 0` 的进程启动初态。真正的启动初态必须用新容器或新进程单独验证。测试结束后清理依赖 Compose fixture，不依赖开发者的本机状态。
-
-### 6.6 交付物清单
-
-| 交付物 | 最低要求 | 责任方向 |
+| 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| 可访问代码仓库 | 源码、提交历史、PR、CI 记录可查看，无秘密和本地产物 | 全员，运维核查 |
-| 根 README | 章节完整、命令真实、在线演示状态真实 | 全栈统筹，全员补全本人部分 |
-| 架构图 | 展示 Web、API、控制、仿真、状态反馈和实际技术 | C++ API 与全栈共同维护 |
-| 可运行应用 | 页面、API、移动、边界、状态反馈完整 | 全栈／算法／虚拟设备软件 |
-| 测试材料 | C++、前端、Python 测试及实际结果 | 算法与质量保障方向 |
-| Docker 材料 | Dockerfile、Compose、`.dockerignore`、启动说明 | 运维方向 |
-| CI 材料 | 工作流文件、可见成功记录、失败日志处理能力 | 运维方向 |
-| 展示材料 | 真实页面截图、一次完整演示 GIF／视频或现场脚本 | 全栈与质量保障方向 |
-| 分工材料 | 计划分工、实际贡献、代码路径和 PR／测试证据 | 每位成员本人确认 |
-
-结业前必须从**干净的仓库副本**重新执行 Docker 主路径，不能只在某台成员机器的旧构建目录中验收。
-
----
-
-## 7. 验收标准（Acceptance Criteria）
-
-以下 5 条均为必须通过的条件。验收时记录实际提交 SHA、浏览器／Docker 版本、请求响应和截图，避免只凭口头说明。
-
-### AC-01：Web 地图、四方向手动控制与状态一致
-
-**前置条件**：默认配置 `(0,0), RIGHT`，页面已成功加载。
-
-**步骤与预期**：
-
-1. 页面显示至少一张完整二维网格地图，能辨认地图边界、机器人和朝向；
-2. 点击 RIGHT 一次，机器人从 `(0,0)` 到 `(1,0)`，朝向 RIGHT；
-3. 依次验证 DOWN、LEFT、UP，每次只移动一格，坐标增减符合坐标约定；
-4. 每次操作后，页面的 `x`、`y`、朝向、运行状态与同时调用 `GET /api/v1/robot` 的结果一致；
-5. 请求进行中按钮不可重复提交，网络失败不出现虚假移动；
-6. 在 `360 × 800 CSS px` 视口下无横向滚动，所有控制与状态可访问；在 Firefox 完成地图加载、四方向、一次边界和一次重置冒烟。
-
-**证据**：桌面与窄屏截图或录屏、对应 API JSON、浏览器网络记录。
-
-### AC-02：RESTful API、边界限制与错误处理
-
-**步骤与预期**：
-
-1. `GET /api/v1/map` 返回 200 和默认 `20 × 20` 地图；
-2. `GET /api/v1/robot` 返回 200 和完整状态字段；
-3. 合法 `POST /api/v1/robot/commands` 返回 201、`commandId`、`result` 和完整 `robot`；
-4. 在 `(0,0)` 发送 UP，返回 201 和 `BLOCKED_BOUNDARY`，位置仍为 `(0,0)`、朝向 UP、`motionStatus = BLOCKED`；
-5. 再发送 RIGHT，机器人成功到 `(1,0)` 且恢复 IDLE，证明边界状态不会锁死；
-6. 发送非法 direction，返回 400 和统一 `error` 结构，位置、朝向和 `sequence` 均不变化；
-7. 任意测试序列中始终满足 `0 <= x < width`、`0 <= y < height`。
-
-**证据**：C++ 单元测试、Python 集成测试输出及请求／响应样例。
-
-### AC-03：状态反馈、重置与恢复行为
-
-**步骤与预期**：
-
-1. 移动若干步后点击重置，机器人恢复 `(0,0), RIGHT, IDLE`，页面与 API 一致；
-2. 合法命令使 `sequence` 恰好增加 1，重置也增加 1，GET 和非法命令不增加；
-3. 自发命令完成后立即更新页面，不等待下一次轮询；
-4. 模拟服务不可用，页面保留最后确认状态并显示连接异常，控制按钮按规范禁用；
-5. 服务恢复后点击重新连接，页面重新拉取并显示真实状态；
-6. 重启容器后出现新的 `instanceId`，机器人恢复配置初态；前端网络记录包含重新获取地图和状态的请求，页面不得以旧地图搭配新实例状态。
-
-**证据**：重置／断连恢复录屏、状态 JSON、容器重启前后记录。
-
-### AC-04：Docker 一键启动与基础 CI
-
-**步骤与预期**：
-
-1. 在干净副本中仅按 README 执行 `docker compose up --build -d`，无需额外安装业务依赖或启动其他服务；
-2. 镜像构建完成后 120 秒内容器进入 healthy，访问 `http://127.0.0.1:8080` 可完成一次手动移动；
-3. 健康、地图、状态 API 可访问，`docker compose down` 能正常清理服务；
-4. 对仓库发起 PR 后，`cpp-unit`、`web-check`、`container-smoke` 三个 CI job 自动运行并全部通过；
-5. 任一项失败时 CI 应失败，且 C++ 测试、前端输出或容器日志足以定位失败阶段。
-
-**证据**：干净环境命令记录、Compose 状态、GitHub Actions 成功链接。
-
-### AC-05：工程规范、文档与五人贡献可追踪
-
-**步骤与预期**：
-
-1. 仓库有清晰的任务分支、PR 和有意义的 Conventional Commits 记录，无密码、令牌、依赖目录和构建产物；
-2. README 覆盖第 5.5 节全部必需章节，且没有未替换的模板占位符或虚假演示地址；
-3. 架构图与真实代码、端口、数据流一致；
-4. 展示材料能演示成功移动、边界阻止、状态反馈和重置；
-5. 五名成员分别按第 8 节提交实际贡献，每项贡献能关联到代码路径、PR、测试报告、CI／部署记录或文档；
-6. 验收人员能够依据文档独立复现 Docker 主路径。
-
-**证据**：仓库链接、PR／Commit 链接、README、展示材料、成员贡献表。
-
----
-
-## 8. 实现算法、全栈、运维、嵌入式、人工智能五方向分工协作
-
-### 8.1 分工原则与方向解释
-
-本项目只有 5 人，采用“**一个主责方向 + 跨方向评审**”，而不是每人各做一套互不相干的模块。
-
-- **实现算法方向**：只实现离散移动和边界规则，不扩展到路径规划。
-- **全栈方向**：主要负责 Web、API Client 和前后端联调。
-- **运维方向**：主要负责构建复现、Docker、Compose、CI 和 Git 交付规范。
-- **嵌入式方向**：在纯软件项目中转译为“**虚拟机器人设备软件／C++ 后端控制**”，负责 API、控制和内存状态，不接触实体硬件。
-- **人工智能方向**：由于本阶段明确排除 AI，转译为“**Python 集成验证、数据契约和质量保障**”；不训练模型、不接 Agent，也不生成自主控制策略。
-
-这种分工既保留五个方向的训练视角，又不会为了匹配方向名称而突破基础版范围。
-
-### 8.2 成员 A——实现算法方向（C++ 仿真核心）
-
-**主责模块**：`backend/src/domain/`、`backend/tests/` 中仿真单元测试。
-
-**详细任务**：
-
-1. 定义 `Position`、`Direction`、`MotionStatus`、`MoveResult` 等领域类型；
-2. 实现 `Grid::contains()` 的矩形边界判断；
-3. 实现四方向增量和单格移动；
-4. 落实“先更新朝向，再检查候选位置”的确定规则；
-5. 确保越界不改变位置，成功移动后清除 BLOCKED；
-6. 提供重置到指定初始姿态的领域能力；
-7. 编写 SIM-01 至 SIM-09、SIM-12 及四角边界测试，配合 D 完成 SIM-10 的领域重置断言；
-8. 向 API 负责人和 Python 测试负责人提供同一份命令序列与预期状态；
-9. 审查所有可能绕过 Domain 修改坐标的代码。
-
-**交付物**：C++ Domain 源码、GoogleTest 用例、测试说明、相关 PR。
-
-**完成判定**：纯 C++ 测试无需 Web 服务即可运行；四个方向和全部边界分支通过；Domain 无 Crow／JSON 依赖。
-
-**协作接口**：向成员 D 提供稳定的 C++ 接口，向成员 E 提供测试向量，向成员 B 解释朝向和边界反馈语义。
-
-### 8.3 成员 B——全栈方向（Web、Canvas 与端到端联调）
-
-**主责模块**：`frontend/`、页面集成、根 README 的访客说明和展示材料。
-
-**详细任务**：
-
-1. 实现页面布局、方向按钮、重置、状态和反馈区域；
-2. 定义 TypeScript API 类型并编写统一 API Client；
-3. 实现 Canvas 网格、边界、机器人及朝向绘制；
-4. 实现命令后即时回写、1 秒轮询、页面隐藏暂停，以及实例变化时重新获取地图和状态的处理；
-5. 实现加载、执行中、边界、断连、重连等 UI 状态；
-6. 防止重复提交，POST 超时后先查询真实状态；
-7. 编写坐标像素映射、状态更新和错误处理的 Vitest 用例；配置 ESLint 及 `package.json` 的 `lint`、`typecheck`、`test`、`build` 脚本，其中测试使用 `vitest run` 非 watch 模式；
-8. 配置开发代理和生产静态页面接入；
-9. 组织首次端到端联调，核对页面与 GET API 一致；
-10. 编写首页简介、功能列表、页面操作指南，制作真实截图／录屏。
-
-**交付物**：前端源码、前端测试、页面截图、演示材料、相关 PR。
-
-**完成判定**：生产容器中的页面可完成全部手动流程；Canvas 与 API 状态一致；无持续无意义重绘；窄屏和键盘按钮可用。
-
-**协作接口**：与成员 D 冻结 JSON 契约，与成员 A 核对方向和边界语义，与成员 E 提供验收页面，与成员 C 提供 `dist` 构建产物。
-
-### 8.4 成员 C——运维方向（Docker、CI 与工程交付）
-
-**主责模块**：Dockerfile、`docker-compose.yml`、`.dockerignore`、`.github/workflows/ci.yml`、依赖版本与分支保护。
-
-**详细任务**：
-
-1. 固化 GCC／CMake／Node／Python 和第三方依赖的实际版本；
-2. 建立多阶段 Docker 构建，确保运行镜像不包含编译工具链和 node_modules；
-3. 配置非 root 用户、端口、静态资源、配置文件和健康检查；
-4. 验证构建镜像与运行镜像的动态库兼容；
-5. 配置 Compose 一键启动、日志、重启策略和停止流程；
-6. 建立 `cpp-unit`、`web-check`、`container-smoke` 三个 CI job；
-7. 配置分支保护、必需检查和 PR 模板，检查仓库不含秘密或构建垃圾；
-8. 验证干净克隆后的 Docker 主路径，并记录实际命令和版本；
-9. 维护运行故障排查说明，如端口占用、构建失败、健康检查失败；
-10. 协助创建最终验收标签，核查结业材料可访问性。
-
-**交付物**：容器与 CI 配置、Actions 成功记录、部署／排障文档、相关 PR。
-
-**完成判定**：干净环境一键启动成功；三个 CI job 可见且通过；容器非 root；失败时能取得有效日志。
-
-**协作接口**：从成员 B 获取前端构建命令，从成员 D 获取二进制目标和运行配置，从成员 E 获取 Python 测试入口。
-
-### 8.5 成员 D——嵌入式方向（虚拟设备软件、C++ API 与控制）
-
-**主责模块**：`backend/src/api/`、`backend/src/control/`、`main.cpp`、配置加载和静态服务。
-
-**详细任务**：
-
-1. 建立 C++ 应用入口、依赖组装和优雅启动／失败退出；
-2. 实现地图、机器人状态、命令和健康检查路由；
-3. 实现严格 JSON 校验、枚举映射、统一错误结构和 HTTP 状态码；
-4. 实现 `RobotController`，串行执行命令并维护 `sequence`、`commandId`、`instanceId`；
-5. 保证每次状态读取是完整一致快照，非法请求不触碰 Domain，并负责 SIM-10 的 Controller 序列号断言和 SIM-11 的 API 校验测试；
-6. 加载并校验 `map.json`，失败时输出明确配置错误；
-7. 实现静态文件托管和同源 API 接入；
-8. 输出必要且不过量的控制台日志，不记录堆栈到客户端；
-9. 与成员 A 联调 C++ 接口，与成员 B 联调每个成功／失败响应；
-10. 支持成员 E 的异常输入、并发和容器重启测试。
-
-**交付物**：C++ API／控制源码、配置校验、接口示例、相关 PR。
-
-**完成判定**：API 契约与本规格一致；无越权设置坐标字段；命令原子执行；静态页面和 API 在同一容器可用。
-
-**明确边界**：不编写驱动、固件、串口或 ROS 节点；“嵌入式”仅指虚拟机器人底层控制与 C++ 工程能力。
-
-### 8.6 成员 E——人工智能方向（Python 集成验证与质量保障）
-
-**主责模块**：`tests/integration/`、验收矩阵、测试报告和演示核对。
-
-**详细任务**：
-
-1. 建立 pytest + requests 黑盒测试环境和依赖清单；
-2. 实现有超时和健康等待的 fixture，避免依赖固定 sleep；
-3. 覆盖地图、初态、四方向移动、边界、重置和健康接口；
-4. 覆盖非法 JSON、缺字段、非法方向、未知字段、错误媒体类型和未知路由；
-5. 验证非法请求不改变状态或 `sequence`；
-6. 用固定命令序列核对最终位置、朝向、运行状态和序列号；
-7. 增加基础并发命令测试，确认所有合法命令最终序列连续且位置始终在界内；
-8. 协助执行容器重启、断连恢复和页面／API 一致性检查；
-9. 将测试命令接入 CI，保存实际测试输出和验收证据；
-10. 核对 README、演示步骤、分工表与实际功能一致。
-
-**交付物**：Python 测试源码、测试报告、验收记录、相关 PR。
-
-**完成判定**：Python 测试可对干净容器独立运行；失败能指出具体请求和断言；覆盖正常、边界和错误路径。
-
-**明确边界**：不实现 AI 模型、智能决策、自然语言控制或 Agent；该方向在本阶段以软件质量和数据契约验证体现价值。
-
-### 8.7 跨模块任务矩阵
-
-| 工作项 | 主责 | 协作 | 必须评审／确认 |
-| --- | --- | --- | --- |
-| 坐标、移动与边界 | A 算法 | D 控制、E 测试 | B 确认 UI 语义 |
-| REST 契约与 JSON | D 虚拟设备软件 | B 全栈、A 算法、E 测试 | 相关四方确认后冻结 |
-| Canvas 与交互 | B 全栈 | D API、E 验收 | A 核对方向映射 |
-| 状态并发与 sequence | D 虚拟设备软件 | A Domain、E 并发测试 | B 确认新旧响应处理 |
-| Python 集成测试 | E 质量保障 | A 测试向量、D API | C 接入 CI |
-| CMake 与依赖 | D／A | C 运维 | C 确认 Docker 可复现 |
-| Docker 与 Compose | C 运维 | B 构建、D 运行入口 | E 做干净环境冒烟 |
-| GitHub Actions | C 运维 | E 测试、B 前端、A/D C++ | 全员确认必需检查 |
-| README 与架构图 | B 统筹 | C 运行、D 架构、A 规则、E 验证 | 全员核对本人内容 |
-| 最终验收与展示 | E 组织核对 | 全员 | 每名成员提交贡献证据 |
-
-### 8.8 契约冻结与变更流程
-
-1. **第一次联调前冻结**：坐标、方向枚举、初始状态、API 路径、请求／响应字段、边界语义、端口。
-2. 契约以本规格为唯一基线，聊天记录不能代替文档。
-3. 任何契约变更必须同时包含：本规格更新、前后端类型更新、测试更新、README 影响检查和关联 PR。
-4. 发现实现与规格不一致时，先判断是实现错误还是规格错误；不得由前端或测试单方面改变字段来“通过”。
-5. 新增范围外想法只记录为未来建议，不进入本阶段分支、接口和验收承诺。
-
-### 8.9 建议协作节奏与联调顺序
-
-**联调顺序**：
-
-1. A 与 D 对齐 C++ Domain 接口和测试向量；
-2. D 用临时但符合契约的 JSON 响应打通 API 形态，随后接入真实 Domain；
-3. B 按契约实现 API Client 和 Canvas，不在前端硬编码移动结果；
-4. E 在真实容器上执行 Python 测试，B 同步进行页面联调；
-5. C 将三层检查接入 CI，并完成干净环境复现；
-6. 全员按 AC-01 至 AC-05 验收并补全实际贡献。
-
-**建议节奏**：每周至少两次短会，阻塞问题通过 Issue 明确负责人；接口问题优先由 B、D、A、E 共同处理，部署问题由 C 牵头，不允许长时间各自等待。
-
-### 8.10 四基础里程碑建议
-
-| 里程碑 | 目标 | 完成出口 |
+| `sensorId` | string | 固定 `range-front`、`range-left`、`range-right`。 |
+| `relativeDirection` | enum | `FRONT`、`LEFT`、`RIGHT`。 |
+| `absoluteDirection` | enum | 经当前朝向转换后的四方向。 |
+| `hitType` | enum | `NONE`、`BOUNDARY`、`OBSTACLE`。 |
+| `distanceCells` | integer/null | 命中距离；NONE 时为 null。 |
+| `cell` | Position/null | 障碍格坐标；边界或 NONE 时为 null。 |
+
+### 6.4 虚拟异常源检测与活动状态
+
+对当前快照中的机器人位置 `(rx,ry)` 和每个异常源 `(hx,hy)`：
+
+```text
+distance = abs(rx - hx) + abs(ry - hy)
+detected = distance <= hazardRangeCells
+```
+
+- 所有符合阈值的异常源都进入 `detections`，按 `hazard.id` 字典序排列，保证稳定。
+- 首版曼哈顿检测不模拟墙体遮挡或信号衰减；这是一项明确的简化，不是物理传感器结论。
+- `activeDetections` 表示最新观察时仍在半径内的异常源。持续检测只更新最新观察，不重复生成“发现”事件。
+- 首次从“未活动”变为“活动”生成 `ANOMALY_DETECTED`；从“活动”变为不在半径内生成一次 `ANOMALY_OUT_OF_RANGE`；再次进入可再次生成发现事件。
+- OUT_OF_RANGE 不删除最后已知位置，不表示异常已维修或消失。前端必须显示“已离开感知范围”，不能显示“已恢复正常”。
+- `RESET` 保留当前实例的感知事件编号和历史缓冲，在新位置重新计算活动检测；服务重启则通过新 `instanceId` 开始全新的感知状态。
+
+**Detection 模型**
+
+| 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| M1：契约与骨架 | 仓库、CMake、Vite、Domain 接口、API 契约、CI 骨架 | 空页面可构建，健康接口可运行，规范已提交 |
-| M2：核心闭环 | Canvas、四方向、状态查询、边界和重置 | AC-01、AC-02 的主要流程在本机通过 |
-| M3：测试与容器 | Python 集成测试、单容器静态托管、三个 CI job | AC-04 通过，失败路径可诊断 |
-| M4：稳定与交付 | 异常恢复、跨成员复现、README、截图、分工和最终验收 | AC-01 至 AC-05 全部有证据 |
+| `hazardId` / `hazardType` / `severity` | string enum | 配置中的异常源标识、类型和等级。 |
+| `label` | string，可选 | 配置中的可读名称。 |
+| `position` | Position | 已发现异常源的最后已知位置。 |
+| `distanceCells` | integer | 最新观察时的曼哈顿距离。 |
 
-里程碑只安排基础版任务，不以高级功能作为“加分必做项”。
+### 6.5 观察生成、去重与顺序
 
-### 8.11 实际贡献记录模板
+启用感知后：
 
-结业前由每名成员如实填写，不以计划分工替代实际贡献：
+1. 服务启动组装完成后，对 `sequence = 0` 的初始快照生成第一次观察。
+2. 每条已受理非幂等命令和每个巡检步完成后，以不可变快照触发一次观察；幂等空操作不强制生成新观察。
+3. 感知服务按 `(instanceId, sequence)` 去重，忽略重复或同实例下更旧的观察。
+4. 一次观察内依次计算三向测距、全部异常检测、活动状态差异和接触事件，再一次性发布最新观察与新增事件。
+5. 当该序列号首次观察到 `lastResult = BLOCKED_BOUNDARY` 时生成 `CONTACT_BOUNDARY`；`BLOCKED_OBSTACLE` 同理。普通测距命中不重复生成 CONTACT 事件。
+6. 观察生成必须在每个巡检步被调用，不能只靠前端 1 秒轮询补采，否则会漏掉 250 ms 间隔内的状态。
+7. 感知处理失败不得回滚已经确认的移动，也不得伪造移动失败；应记录错误并将感知 API 标记为不可用。首版纯规则不应在正常配置下产生运行时失败。
 
-| 成员／方向 | 实际完成内容 | 代码或文档路径 | PR／Commit 链接 | 验证证据 | 协作者确认 |
-| --- | --- | --- | --- | --- | --- |
-| 成员 A／算法 | 待本人填写 | 待填写 | 待填写 | C++ 测试结果 | D、E |
-| 成员 B／全栈 | 待本人填写 | 待填写 | 待填写 | 页面录屏、前端测试 | D、E |
-| 成员 C／运维 | 待本人填写 | 待填写 | 待填写 | Compose 与 Actions 记录 | B、E |
-| 成员 D／虚拟设备软件 | 待本人填写 | 待填写 | 待填写 | API 示例与控制测试 | A、B |
-| 成员 E／质量保障 | 待本人填写 | 待填写 | 待填写 | pytest 报告、验收矩阵 | A、D |
+观察与机器人快照通过 `sequence` 关联；事件使用独立 `eventId`。不得假定“一次状态变化恰好只有一个事件”，因为一个序列号可以同时产生异常发现和接触事件。
+
+### 6.6 感知事件与有界缓冲
+
+事件类型：
+
+| 类型 | 生成时机 |
+| --- | --- |
+| `ANOMALY_DETECTED` | 某异常源新进入感知半径。 |
+| `ANOMALY_OUT_OF_RANGE` | 某活动异常源在最新观察中已离开半径。 |
+| `CONTACT_BOUNDARY` | 新序列号确认边界阻挡。 |
+| `CONTACT_OBSTACLE` | 新序列号确认障碍物阻挡。 |
+
+**PerceptionEvent**
+
+| 字段 | 类型 | 规则 |
+| --- | --- | --- |
+| `eventId` | integer | 当前实例从 1 开始严格递增；无事件时 `latestEventId = 0`。 |
+| `instanceId` | string | 与产生事件的机器人实例一致。 |
+| `sequence` | integer | 产生事件的状态序列号。 |
+| `type` | enum | 上表四种事件之一。 |
+| `position` | Position | 事件发生时机器人所在位置。 |
+| `hazard` | Detection，可选 | 异常事件必填；接触事件省略。 |
+| `contactResult` | enum，可选 | 接触事件为 `BLOCKED_BOUNDARY` 或 `BLOCKED_OBSTACLE`。 |
+
+内存规则：
+
+- 使用容量 **200 条**的环形缓冲；超出后覆盖最旧事件，最新观察和活动检测仍保留。
+- `eventId` 在服务重启后重新从 1 开始，客户端必须先用 `instanceId` 隔离旧数据。
+- 缓冲只是短期事件流，不承诺永久历史、审计或跨重启报表。
+- 新事件入库与最新观察发布在同一感知锁内完成，查询不得看到“最新观察已更新但对应事件尚未可见”的中间态。
+
+### 6.7 新增只读 API
+
+| 方法与路径 | 成功码 | 说明 |
+| --- | --- | --- |
+| `GET /api/v1/perception/latest` | 200 | 最新观察、当前活动检测和最新事件号，支持 HEAD。 |
+| `GET /api/v1/perception/events?after=0&limit=50` | 200 | 按 `eventId` 升序读取增量事件，支持 HEAD。 |
+
+首版不新增感知 POST、异常确认／维修、传感器参数在线修改或异常源全量真值查询接口。
+
+#### 6.7.1 最新观察
+
+```json
+{
+  "enabled": true,
+  "instanceId": "srv-example",
+  "observation": {
+    "sequence": 12,
+    "rangeCells": 3,
+    "ranges": [
+      {
+        "sensorId": "range-front",
+        "relativeDirection": "FRONT",
+        "absoluteDirection": "DOWN",
+        "hitType": "OBSTACLE",
+        "distanceCells": 1,
+        "cell": { "x": 4, "y": 4 }
+      },
+      {
+        "sensorId": "range-left",
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "RIGHT",
+        "hitType": "NONE",
+        "distanceCells": null,
+        "cell": null
+      },
+      {
+        "sensorId": "range-right",
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "LEFT",
+        "hitType": "NONE",
+        "distanceCells": null,
+        "cell": null
+      }
+    ],
+    "detections": [
+      {
+        "hazardId": "smoke-01",
+        "hazardType": "SMOKE",
+        "severity": "HIGH",
+        "label": "配电区域烟雾",
+        "position": { "x": 4, "y": 3 },
+        "distanceCells": 0
+      }
+    ]
+  },
+  "activeDetections": [
+    {
+      "hazardId": "smoke-01",
+      "hazardType": "SMOKE",
+      "severity": "HIGH",
+      "label": "配电区域烟雾",
+      "position": { "x": 4, "y": 3 },
+      "distanceCells": 0
+    }
+  ],
+  "latestEventId": 8
+}
+```
+
+示例对应机器人位于 `(4,3)`、`heading = DOWN`，前方 `(4,4)` 是默认地图障碍物，异常源与机器人在同一格。`observation.detections` 与 `activeDetections` 使用相同值对象；实现可复用数据，不必在 JSON 之外保存两份权威状态。
+
+未启用时返回 200：`enabled = false`、`observation = null`、`activeDetections = []`、`latestEventId = 0`，并带当前 `instanceId`。前端显示“虚拟感知未启用”，不当作服务故障。
+
+#### 6.7.2 增量事件
+
+查询参数：
+
+- `after`：可选，非负十进制整数，默认 0，只返回 `eventId > after` 的事件；
+- `limit`：可选，整数 `1..100`，默认 50；
+- 重复参数、空值、非数字、溢出或其他查询字段返回 `400 INVALID_QUERY_PARAMETER`，`details.field` 指出参数；
+- `after` 大于当前最大编号是合法空结果，不自动当作错误。
+
+请求 `GET /api/v1/perception/events?after=8&limit=50` 的响应示例（异常感知半径为 2）：
+
+```json
+{
+  "instanceId": "srv-example",
+  "events": [
+    {
+      "eventId": 9,
+      "instanceId": "srv-example",
+      "sequence": 13,
+      "type": "ANOMALY_OUT_OF_RANGE",
+      "position": { "x": 7, "y": 3 },
+      "hazard": {
+        "hazardId": "smoke-01",
+        "hazardType": "SMOKE",
+        "severity": "HIGH",
+        "label": "配电区域烟雾",
+        "position": { "x": 4, "y": 3 },
+        "distanceCells": 3
+      }
+    }
+  ],
+  "oldestEventId": 3,
+  "latestEventId": 9,
+  "hasMore": false,
+  "truncated": false
+}
+```
+
+事件按升序返回。`hasMore` 表示缓冲中是否还有本次 `limit` 之后的事件。若调用方的 `after` 早于当前最旧保留事件，`truncated = true` 并返回仍可取得的事件；客户端必须重新获取 `latest`，以最新活动状态为准，再从新基线继续增量拉取，不能假装补齐了已丢失历史。
+
+感知关闭时事件接口返回当前 `instanceId`、空 `events`、`oldestEventId = null`、`latestEventId = 0`、`hasMore = false`、`truncated = false`。
+
+### 6.8 前端展示与轮询
+
+| 编号 | 要求 |
+| --- | --- |
+| FR-VP-UI-001 | 新增独立感知面板，显示三向命中类型、距离、最新观察序列号和活动异常。 |
+| FR-VP-UI-002 | 命中、异常等级和离开范围均同时用文字／图形表达，不只依赖颜色。 |
+| FR-VP-UI-003 | 页面只展示已发现异常的最后已知位置；未发现的配置真值不得出现在地图或调试文本中。 |
+| FR-VP-UI-004 | 事件按 `eventId` 去重，面板最多显示最近 20 条；新事件提示使用 `aria-live="polite"`，避免每次轮询重复播报。 |
+| FR-VP-UI-005 | 感知有独立 `DISABLED / LOADING / READY / DEGRADED / DISCONNECTED` 状态，感知请求失败不得清除机器人状态或阻断现有巡检按钮。 |
+| FR-VP-UI-006 | 页面可见时与机器人同周期获取 latest 和增量 events，隐藏时暂停；请求必须单飞，慢响应不得无限重叠。 |
+| FR-VP-UI-007 | `instanceId` 改变时清空旧观察和事件游标，重新加载地图、机器人、latest，并从 `after = 0` 拉取事件。 |
+| FR-VP-UI-008 | 同实例下忽略更旧观察；`truncated = true` 时以 latest 重建活动视图并提示“部分早期事件已不在缓冲中”。 |
+| FR-VP-UI-009 | 感知图层只画已发现异常和必要的测距指示，不修改机器人图层和原地图配置。 |
+
+页面文字应区分：“范围内无命中”“检测到障碍”“实际移动受阻”“异常在范围内”“异常已离开感知范围”。
+
+### 6.9 虚拟感知验收用例
+
+| 用例 | 前置条件／操作 | 预期 |
+| --- | --- | --- |
+| VP-01 | 机器人贴左边界，朝右，量程 3 | 左射线在 1 格处命中 BOUNDARY，cell 为 null。 |
+| VP-02 | 前方 2 格为障碍，其后还有障碍 | 只返回最近障碍，距离 2，不穿透。 |
+| VP-03 | 量程内无边界／障碍 | hitType 为 NONE，distance 和 cell 均为 null。 |
+| VP-04 | 分别设置四种 heading | 前、左、右的绝对方向映射正确。 |
+| VP-05 | 异常源与机器人曼哈顿距离等于、超出半径 1 格 | 等于时检测，超出时不检测。 |
+| VP-06 | 同一异常连续停留多个序列号 | 只产生一次 ANOMALY_DETECTED，活动读数持续更新。 |
+| VP-07 | 离开半径、再次进入 | 各产生一次 OUT_OF_RANGE 和新的 DETECTED；不宣称异常消失。 |
+| VP-08 | 同一快照通知两次，或旧快照后到 | 不重复事件，不覆盖新观察。 |
+| VP-09 | 边界／障碍命令被阻止 | 对应 CONTACT 事件恰好一条，位置不变，原 `sequence` 规则不变。 |
+| VP-10 | 自动巡检连续推进 | 每个已确认步最多观察一次，轮询较慢时仍可通过事件流取得保留事件。 |
+| VP-11 | 写入超过 200 条事件并分页 | 容量有界，oldest／hasMore／truncated 和 after 语义正确。 |
+| VP-12 | 非法配置、未启用配置、非法查询参数 | 非法启动配置非零退出；未启用返回空功能视图；非法查询返回统一 400。 |
+| VP-13 | RESET 与进程重启分别验证 | RESET 保留事件编号；重启更换实例并重新开始观察／事件编号。 |
+| VP-14 | 感知开启前后运行现有巡检回归 | 路径、停止、接管、序列号和现有 API 结果不变。 |
 
 ---
 
-**文档结束。实现期间若本规格与代码不一致，必须通过受审 PR 修正规格或代码，保证范围、接口、测试、README 和实际行为一致。**
+## 7. 非功能、可靠性与安全要求
+
+| 类别 | 要求 | 状态／验证 |
+| --- | --- | --- |
+| 可靠性 | 单条移动原子确认；非法请求无部分状态；线程退出可等待；重启恢复配置初态 | `[当前]` 单元／集成测试；`[规划]` 增加并发代际测试 |
+| 状态一致性 | 前端以实例和序列号拒绝旧快照；感知另有事件编号和缓冲缺口提示 | 当前快照机制 + 规划感知测试 |
+| 性能 | 默认地图普通本地操作即时反馈；全图规划不得长期占用状态锁 | 当前无公开 SLA；架构阶段记录基准 |
+| 容量 | 地图最大 100×100；感知异常源最多 128；测距／异常半径最大 20；事件最多保留 200 | `[规划]` 启动校验和压力用例 |
+| 可维护性 | Domain 不依赖 HTTP；API DTO 与领域类型分离；新规则有独立纯函数测试 | Code Review、CMake 依赖检查 |
+| 浏览器 | 至少一个 Chromium 完整验收，Firefox 做地图、四方向、阻挡、巡检和重置冒烟 | 当前为验收要求，不宣称已有自动化 E2E |
+| 可访问性 | 原生按钮、键盘焦点、文本反馈、非纯颜色提示、窄屏可操作 | 页面走查和截图 |
+| 容器安全 | 非 root、no-new-privileges、精简运行镜像、限制请求体、不泄露堆栈 | 配置审查与异常请求 |
+| 供应链 | lockfile／固定 release；CD 使用不可变镜像摘要；Actions 最小权限，发布／部署步骤固定到经批准的 Action 版本或提交 | 当前部分具备，CD 阶段补齐 |
+| 秘密管理 | 不提交 `.env`、令牌或私钥；部署秘密只放 GitHub Environments／Secrets，不写进镜像和日志 | 所有阶段检查 |
+| 公网边界 | 当前无用户鉴权；不得把任意人可操控的机器人接口误称为生产级安全系统 | 在线演示优先使用平台访问控制并说明课程演示属性 |
+| 持久化 | 无数据库；发布、回滚和重启都会恢复初始位姿并清空内存观察 | README、发布说明和验收中明确 |
+
+本地开发、测试和在线演示的地址必须分开记录。未实际部署时 README 和发布材料写“未部署”，不得使用虚构 URL、成功 Actions 链接或性能数字。
+
+---
+
+## 8. 测试策略与验收标准
+
+### 8.1 当前测试入口 `[当前]`
+
+| 层 | 命令 | 当前覆盖重点 |
+| --- | --- | --- |
+| C++ | `ctest --test-dir build --output-on-failure` | 四方向、边界、障碍、重置、序列号、并发、命令解析、巡检覆盖与执行。 |
+| 前端 | `cd frontend && npm ci && npm run lint && npm run typecheck && npm test && npm run build` | 状态机、API Client、Canvas 坐标和构建。 |
+| Python | `pytest tests/integration -q --base-url http://127.0.0.1:8080` | 健康、地图／机器人契约、移动、阻挡、巡检启停、重置和错误。 |
+| 容器 | `docker compose up --build -d`，健康后运行 Python 测试，最后 `docker compose down` | 镜像构建、静态页面所需产物、健康和真实 API。 |
+
+Python fixture 通过有超时的健康轮询等待服务，所有 HTTP 请求有超时；需要初始位姿时通过公开 RESET 建立基线，不把 RESET 错当成 `sequence = 0` 的进程初态。真正的启动初态应在新进程／新容器中验证。
+
+### 8.2 当前巡检回归矩阵
+
+| 场景 | 必须保持的结果 |
+| --- | --- |
+| 5×5 无障碍规划 | 从起点覆盖 25 格，路径 24 步，每步相邻且可通行。 |
+| 障碍墙、散布障碍、死胡同 | 覆盖全部起点可达格，不进入障碍。 |
+| 不可达孤岛 | 不误判为本次已覆盖，其余可达格仍覆盖。 |
+| 同图同起点重复规划 | 方向序列确定。 |
+| 组合策略 | 覆盖正确，长度不超过两种候选路径各自长度。 |
+| 起点被围／位于障碍 | 返回空路径，启动后立即完成。 |
+| 3×3 控制器巡检 | 启动 +1，8 个移动步各 +1，最终自动完成。 |
+| 重复 START／未激活 STOP | 幂等返回，不增加 sequence。 |
+| 手动 MOVE／RESET 接管 | 巡检停止，本条命令正常执行且只增加自己的 sequence。 |
+| 并发移动 | 序列号不丢失，位置始终在界内。 |
+
+### 8.3 新增测试要求 `[规划]`
+
+- **感知纯函数**：三向旋转、最近命中、边界距离、曼哈顿阈值、多异常排序、活动状态转换。
+- **感知服务**：重复／乱序观察、每序列多事件、RESET、实例重启、200 条环形缓冲、分页和截断。
+- **控制器与架构**：规划期间快照读取、停止与重规划竞争、锁外 join、重复启动、析构退出；时序断言使用确定性驱动和有限期限。
+- **前端**：感知独立降级、事件去重、旧实例清理、旧观察忽略、缓冲截断恢复、文字可访问性。
+- **Python 黑盒**：配置启用／关闭、latest、events、异常进入／离开、接触事件、非法查询、感知开启后的现有巡检回归。
+- **CI/CD 演练**：分别制造 C++、前端、集成测试失败确认门禁有效；模拟部署后健康失败验证回滚。演练不得依赖真正破坏生产服务。
+
+全局覆盖率先在首轮感知测试完成后记录基线，再决定是否设置数值门禁；不得为了达到百分比删除边界断言或用无意义测试充数。
+
+### 8.4 当前功能验收
+
+**AC-CUR-01：地图、移动和阻挡**
+
+1. 默认页面显示 30×30 网格、40 个障碍物和 `(0,0), RIGHT` 的机器人。
+2. 完成 RIGHT → DOWN → LEFT → UP 四步，每步坐标正确、页面与 GET 快照一致。
+3. 在 `(0,0)` 向上被边界阻止，位置不变、朝向 UP；随后成功移动恢复 IDLE。
+4. 从 `(4,3)` 向下被 `(4,4)` 障碍阻止，返回 `BLOCKED_OBSTACLE`。
+
+**AC-CUR-02：自动巡检**
+
+1. RESET 后 START 返回 201、`PATROL_STARTED` 和 `patrolActive = true`。
+2. 有界期限内观察到 `sequence` 至少自动增加 3，位置持续合法，按钮可切换为停止。
+3. STOP 后 `patrolActive = false`；小地图 C++ 测试验证自动覆盖和完成，不要求演示时等待默认 30×30 全图跑完。
+4. 重复 START、未激活 STOP、MOVE／RESET 接管符合第 4.5 节序列号表。
+
+**AC-CUR-03：错误、重置与恢复**
+
+1. 非法方向、未知字段、错误媒体类型、未知路由返回约定错误，状态和序列号不被非法请求修改。
+2. RESET 恢复姿态但序列号累计；GET 不改变状态。
+3. 断线保留最后确认状态，恢复后重新同步；容器重启出现新实例并恢复配置初态。
+
+### 8.5 后续迭代验收
+
+**AC-ARCH：架构优化**
+
+满足第 5.8 节全部条件，附既有测试、并发测试、CMake 依赖证据和同条件性能对比；不得以 API 行为变化换取通过。
+
+**AC-VP：虚拟感知**
+
+1. 使用小型固定配置复现 VP-01 至 VP-14，默认地图另做一次真实页面演示。
+2. 页面能显示三向测距、一次异常发现、一次离开范围、一次接触事件，文字语义正确。
+3. 慢速轮询下仍能从事件接口读到保留的巡检事件；实例变化和缓冲截断不会混入旧状态。
+4. 感知关闭和感知请求失败均不影响现有手动／巡检功能。
+5. 未检测异常源没有提前出现在页面。
+
+**AC-CD：发布与回滚**
+
+满足第 9.8 节，提供实际工作流运行、镜像摘要、预发布验证、生产审批和回滚演练记录。未执行实际发布前，只能标记“流程已配置，部署未验证”或相应真实状态。
+
+---
+
+## 9. CI 基线与 CI/CD 设计
+
+### 9.1 当前 CI `[当前]`
+
+`.github/workflows/ci.yml` 在所有 PR、推送 `main` 和手工触发时运行，权限为 `contents: read`，同一工作流和 ref 的新运行可取消旧运行。
+
+| Job | 环境／超时 | 当前步骤 | 通过证据 |
+| --- | --- | --- | --- |
+| `cpp-unit` | Ubuntu 24.04／15 分钟 | 安装 Boost／Asio，CMake Release 配置、编译、CTest | C++ 测试成功。 |
+| `web-check` | Ubuntu 24.04、Node 22／15 分钟 | `npm ci`、lint、typecheck、Vitest、生产构建 | 无静态错误，测试通过并生成 dist。 |
+| `container-smoke` | Ubuntu 24.04、Docker、Python 3.12／15 分钟 | 安装测试依赖、Compose 构建启动、pytest、失败输出日志、始终 down | 镜像可启动，健康等待和黑盒 API 通过。 |
+
+三个 Job 是现有验证基线。当前没有镜像仓库发布、部署环境、生产审批、自动回滚或实际在线环境；不能把 CI 成功写成 CD 已完成。
+
+### 9.2 目标流水线 `[规划]`
+
+```mermaid
+flowchart LR
+    PR["Pull Request"] --> CI["base-ci<br/>C++ / Web / Container"]
+    Main["main 上 base-ci 成功"] --> Package["CD 构建一次镜像<br/>启动并冒烟"]
+    Package --> Push["推送 GHCR<br/>记录不可变 digest"]
+    Push --> Staging["部署 Staging<br/>完整 API 与页面验收"]
+    Staging --> Approval["Production Environment<br/>人工审批 + 指定 digest"]
+    Approval --> Prod["按同一 digest 部署 Production"]
+    Prod --> Smoke["只读健康与页面冒烟"]
+    Smoke -->|失败| Rollback["重新部署上一可用 digest<br/>再次验证并报告"]
+```
+
+- PR 只运行验证，不登录镜像仓库、不使用部署秘密、不部署 PR 代码。
+- `main` 的 CI 成功后才允许 CD；CD 镜像自身启动冒烟通过后才推送。
+- 预发布部署使用完整集成测试；生产提升必须由人工选择已验证的镜像摘要并经过 Environment 审批。
+- 预发布和生产之间不重新构建镜像，避免“测试的是一个产物，上线的是另一个产物”。
+
+### 9.3 CI 加固要求
+
+1. 保留三个必需检查；新增感知 C++／Python 用例并入对应 Job，前端新增检查继续走 `web-check`。
+2. `main` 启用分支保护：至少 1 名非作者审查、必需检查通过、解决会话后合并，禁止强制推送共享分支。
+3. 所有 PR 都运行完整必需检查；路径过滤或缓存不得造成未测试合并。
+4. npm 使用 `npm ci`；Python 和 CMake 缓存键必须包含依赖清单／CMakeLists 和运行环境，缓存不命中时仍能正确构建。
+5. Job 失败时上传必要的 CTest、前端和 Compose 诊断日志，保留期建议 7 天；上传前确认不含秘密和无关大文件。
+6. 容器 Job 始终执行 `docker compose down`；健康等待有期限，不能无限挂起。
+7. 若后续加入浏览器 E2E，必须将依赖写入 lockfile、使用固定浏览器版本，并把该检查设为虚拟感知 UI 的必需验收，而不是只保存截图。
+
+### 9.4 CD 工作流与权限
+
+建议新增 `.github/workflows/cd.yml`：
+
+- **持续预发布**：由 `main` 上 `base-ci` 成功的 `workflow_run` 触发，显式 checkout 该运行的 `head_sha`，并核对结论、分支和提交，禁止处理来自 PR 的不受信任输入。
+- **生产提升／回滚**：由 `workflow_dispatch` 触发，输入完整 `image_digest` 和部署原因；目标 `production` Environment 强制人工审批。
+- CI／测试 Job 保持 `contents: read`；仅镜像发布 Job 增加 `packages: write`，使用 `GITHUB_TOKEN` 登录 GHCR，不向其他 Job 扩大权限。
+- 部署使用 GitHub Environments 保存主机、用户、SSH 密钥或平台令牌；秘密不下发到 PR，不 echo，不写入仓库。
+- 同一 Environment 使用并发组串行部署；生产部署 `cancel-in-progress: false`，避免两个版本同时操作同一容器。
+- 每个发布运行记录源代码 SHA、镜像 digest、测试结果、部署环境、操作者和回滚目标。
+
+参考部署目标是“支持 SSH 的单机 Docker 主机”，与当前单容器架构一致。若改用云托管容器平台，只替换部署适配步骤，不得削弱 digest、审批、健康检查和回滚门禁。
+
+### 9.5 镜像命名与制品
+
+镜像地址采用小写 GHCR 仓库路径，例如 `ghcr.io/<owner>/<repository>`。标签用于查找，**部署必须使用 digest**：
+
+| 制品 | 用途 |
+| --- | --- |
+| `sha-<完整 git SHA>` | 指向某次源代码构建的辅助标签。 |
+| `vX.Y.Z` | 正式版本标签，仅打在通过验证的提交上。 |
+| `<image>@sha256:<digest>` | 预发布、生产和回滚的唯一部署输入。 |
+| SBOM／构建来源信息（可选） | 供应链增强，不作为第一版 CD 的阻塞项。 |
+
+`latest` 或 `main` 等可变标签不得作为生产部署和回滚依据。CD 在推送前以生产等价入口启动镜像，运行健康检查、Python 冒烟和静态首页检查；推送后记录 digest，后续部署不再执行不同构建。
+
+`deploy/compose.yaml` 通过 `APP_IMAGE` 接收完整 `image@digest`，保留当前非 root、健康检查、端口和只读地图配置要求。运行主机无需克隆整个源码仓库，只需受审的部署配置和镜像拉取权限。
+
+### 9.6 预发布、生产与回滚步骤
+
+**预发布**：
+
+1. 从已通过 CI 的 main 提交构建镜像并本地启动冒烟；
+2. 推送 GHCR，取得 digest；
+3. 在 Staging 按 digest 拉取并执行 `docker compose up -d`；
+4. 有界等待健康，执行完整 pytest、首页和关键静态资源检查；
+5. 感知上线后，在隔离演示数据中执行感知流程和现有巡检回归；
+6. 记录可访问地址、版本和验证结果。
+
+**生产提升**：
+
+1. 操作者复制已通过 Staging 的 digest，手工启动生产工作流并填写原因；
+2. Production Environment 审批通过后，记录该环境当前可用 digest 作为回滚点；
+3. 按新 digest 更新 `APP_IMAGE` 并启动，禁止在部署机上重新编译；
+4. 执行健康、地图、机器人、首页和静态资源等**只读**检查；
+5. 不在公开生产环境运行会 RESET、MOVE、START／STOP PATROL 的完整集成测试，以免干扰访客；有副作用的完整测试只在 Staging 做；
+6. 验证通过后更新部署记录和 README 的真实演示地址／版本。
+
+**回滚**：
+
+1. 新版本健康验证失败时，停止继续流量切换或继续发布，并选择部署前记录的最后健康 digest；
+2. 使用同一部署流程恢复旧 digest，再执行只读健康检查；
+3. 回滚失败必须使工作流失败并明确告警，不能伪造“已恢复”；
+4. 也支持人工用旧 digest 发起生产工作流，仍需审批和填写原因；
+5. 无数据库使回滚无需数据迁移，但进程重启会重置机器人与感知内存状态，发布说明必须明确这一影响。
+
+### 9.7 环境与配置清单
+
+| 名称 | 类型 | 用途 |
+| --- | --- | --- |
+| `STAGING_BASE_URL` / `PRODUCTION_BASE_URL` | Environment 非秘密变量 | 部署后外部健康和只读冒烟。 |
+| `DEPLOY_HOST` / `DEPLOY_USER` | Environment 秘密或受控变量 | SSH 部署目标，按团队安全策略保存。 |
+| `DEPLOY_SSH_KEY` | Environment 秘密 | 专用、最小权限、可轮换的部署密钥。 |
+| `GHCR_TOKEN` | 通常不另建 | 优先使用受限 `GITHUB_TOKEN`；私有镜像拉取凭据单独管理。 |
+| `APP_IMAGE` | 部署时生成 | 完整镜像名和 digest，不包含秘密。 |
+
+这些只是规划名称，仓库当前没有对应部署环境。配置完成后须由运维负责人验证权限和轮换方式，不能把占位值当作已配置。
+
+### 9.8 CI/CD 验收
+
+1. 任一必需测试失败时 PR 不可合并，日志能定位失败阶段。
+2. PR 工作流不能读取部署秘密、推送镜像或触发部署。
+3. main CI 成功后，CD 构建并冒烟镜像，GHCR 中存在与源代码 SHA 对应的制品和 digest。
+4. Staging 与 Production 的部署记录显示相同 digest；生产提升有审批记录。
+5. 修改 `APP_IMAGE` 为旧 digest 能完成回滚；模拟健康失败时不会把失败版本报告为成功。
+6. 同一环境并发发布不会互相覆盖；生产只执行只读验收。
+7. 日志、镜像和仓库不含部署秘密；README 的在线地址和实际状态一致。
+8. 发布和回滚后均验证当前 API 与巡检回归契约，且明确内存状态已重置。
+
+---
+
+## 10. 实施顺序、分工与完成定义
+
+### 10.1 推荐迭代顺序
+
+| 里程碑 | 状态 | 内容 | 完成出口 |
+| --- | --- | --- | --- |
+| M0：现有功能基线 | `[当前]` | 手动、障碍、巡检、前端状态、Docker、三 Job CI | 第 4 章与当前代码一致，现有测试作为回归门禁。 |
+| M1：架构安全底座 | `[规划]` | CMake 依赖拆分、控制器线程边界、API 公共错误处理、前端轮询单飞 | AC-ARCH；当前 API 和巡检行为不变。 |
+| M2：虚拟感知后端 | `[规划]` | 配置、纯感知规则、观察去重、事件缓冲、两个只读 API | VP 后端用例和黑盒契约通过。 |
+| M3：虚拟感知前端 | `[规划]` | 感知面板、已发现异常图层、独立降级、事件增量同步 | AC-VP；现有巡检开启感知后无回归。 |
+| M4：CI 加固与 CD | `[规划]` | 日志制品、GHCR、Staging、生产审批、digest 回滚 | AC-CD；真实运行记录齐全。 |
+
+M1 可先完成支撑感知所需的模块边界，但不应扩张为全项目重写。每个里程碑独立 PR／小组 PR、独立验收，前一个未通过时不靠后续功能掩盖问题。
+
+### 10.2 五方向分工
+
+| 成员／方向 | 当前主责 | 后续任务 |
+| --- | --- | --- |
+| A／实现算法 | Grid、Robot、巡检规划和 C++ 测试 | 实现纯测距／异常检测规则、边界向量和感知测试；**不调整现有巡检算法**。 |
+| B／全栈 | Canvas、API Client、UI 状态和联调 | 感知面板、事件去重、独立降级、实例恢复和可访问性；优化轮询编排。 |
+| C／运维 | Docker、Compose、Actions 和复现 | CI 加固、GHCR、Environments、Staging／Production、审批、回滚和部署文档。 |
+| D／虚拟设备软件／C++ 后端 | API、Controller、配置和线程 | 模块依赖、执行器生命周期、感知观察挂点、只读 API、并发测试；保持当前命令契约。 |
+| E／质量保障 | Python 黑盒测试和验收材料 | 感知测试矩阵、架构竞争测试、发布／回滚演练、证据归档和文档一致性。 |
+
+跨方向约束：A 与 D 冻结纯 C++ 接口；B 与 D 冻结 JSON；E 将同一测试向量用于 Domain 和黑盒验证；C 只部署已经由相关责任人验证的制品。
+
+### 10.3 契约变更流程
+
+1. 当前第 4 章是兼容基线，新感知只新增只读资源，不修改现有命令字段。
+2. 变更前在 PR 写明需求编号、状态（当前／规划）、兼容性、配置和测试影响。
+3. 任何 API 变更同时更新本规格、C++ DTO、TypeScript 类型、集成测试、README 和演示材料。
+4. 发现实现与规格不一致时，先以源码和复现结果确认是实现缺陷还是规格错误，不得单方面改测试迎合错误行为。
+5. `[规划]` 项目只有代码、测试、文档和真实验收完成后才能改为 `[当前]`；CI 配置完成不等于部署成功。
+6. 未决定的高级想法放入非目标或后续建议，不提前创建插件、数据库和微服务骨架。
+
+### 10.4 Definition of Done
+
+一项任务只有同时满足以下条件才算完成：
+
+- 实现落在明确任务分支和受审 PR 中，提交只包含相关改动；
+- 相关单元、前端、黑盒和真实容器检查通过，没有删除断言或跳过失败用例；
+- 当前手动和自动巡检回归通过，外部行为未被无意修改；
+- 配置、错误、并发、重启和失败路径有验证，不只演示正常流程；
+- SPEC、README、架构图、测试说明和实际代码一致；
+- CI 记录可访问；若涉及 CD，另有 digest、环境、审批、健康和回滚证据；
+- 未实现、未部署和未验证的项目被明确标出，没有以计划代替结果。
+
+### 10.5 当前已知限制与后续边界
+
+- 当前为单机器人、单进程、内存状态，没有历史任务、数据库、用户权限和永久审计。
+- 当前页面 1 秒轮询可能遗漏 250 ms 巡检中的瞬时结果；感知事件流只能在其实现并验证后解决已保留事件的可观察性。
+- 当前地图静态，巡检规划已经知道所有静态障碍；虚拟测距用于演示感知，不代表机器人此前“不知道地图”。
+- 首版异常源是确定性配置，不模拟真实气体扩散、温度传播、遮挡、误报或硬件故障。
+- 首版异常检测不改变巡检路径；自主处置属于另立需求，不能默默加入。
+- 当前 CI 成功不代表镜像已经发布或应用已经部署；实际在线地址、监控和 SLA 必须另行验证。
+
+---
+
+**文档结束。实现期间若代码与本规格不一致，必须通过受审变更修正规格或实现，并同步测试、README 和验收证据。**
