@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <random>
 
 #include "domain/grid.hpp"
 #include "perception/perception_types.hpp"
@@ -105,6 +106,38 @@ inline std::vector<Detection> detectHazards(
                   return a.hazardId < b.hazardId;
               });
     return detections;
+}
+
+// 为每个异常源从可通行格中抽取互不重复的随机位置（RESET 后随机化真值）。
+// 确定性 Fisher-Yates 洗牌（rng() % i），可注入固定种子以便测试；
+// 结果保证界内可通行、互不重复。可通行格数少于 hazards.size()（含空网格）
+// 时无法满足互不重复，返回空向量，由调用方保持原位。
+inline std::vector<Position> sampleHazardPositions(
+    const std::vector<Hazard>& hazards, const Grid& grid, std::mt19937& rng) {
+    std::vector<Position> walkable;
+    walkable.reserve(static_cast<std::size_t>(grid.width()) *
+                     static_cast<std::size_t>(grid.height()));
+    for (int y = 0; y < grid.height(); ++y) {
+        for (int x = 0; x < grid.width(); ++x) {
+            const Position p{x, y};
+            if (grid.isWalkable(p)) {
+                walkable.push_back(p);
+            }
+        }
+    }
+    if (walkable.size() < hazards.size()) {
+        return {};  // 可通行格不足，无法保证互不重复。
+    }
+    for (std::size_t i = walkable.size(); i > 1; --i) {
+        const std::size_t j = static_cast<std::size_t>(rng()) % i;
+        std::swap(walkable[i - 1], walkable[j]);
+    }
+    std::vector<Position> out;
+    out.reserve(hazards.size());
+    for (std::size_t i = 0; i < hazards.size(); ++i) {
+        out.push_back(walkable[i]);
+    }
+    return out;
 }
 
 }  // namespace patrol

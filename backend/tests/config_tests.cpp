@@ -61,6 +61,21 @@ TEST(PerceptionConfig, ValidConfigWithoutLabel) {
     std::remove(path.c_str());
 }
 
+TEST(PerceptionConfig, ValidOilLeakType) {
+    // 新增异常类型：OIL_LEAK 可正确解析。
+    const std::string path = writeTempJson(
+        "valid_oil",
+        R"({"version":1,"enabled":true,"rangeCells":3,"hazardRangeCells":2,
+            "hazards":[{"id":"oil-01","type":"OIL_LEAK","severity":"MEDIUM",
+                        "position":{"x":2,"y":2},"label":"液压管路油污"}]})");
+    const auto cfg = loadPerceptionConfig(path, makeMap());
+    ASSERT_EQ(cfg.hazards.size(), 1u);
+    EXPECT_EQ(cfg.hazards[0].type, HazardType::OilLeak);
+    EXPECT_EQ(cfg.hazards[0].severity, Severity::Medium);
+    EXPECT_EQ(cfg.hazards[0].label, "液压管路油污");
+    std::remove(path.c_str());
+}
+
 TEST(PerceptionConfig, RejectsUnknownField) {
     const std::string path = writeTempJson(
         "unknown",

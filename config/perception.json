@@ -24,6 +24,13 @@
       "severity": "LOW",
       "position": { "x": 18, "y": 18 },
       "label": "管道轻微泄漏"
+    },
+    {
+      "id": "oil-01",
+      "type": "OIL_LEAK",
+      "severity": "MEDIUM",
+      "position": { "x": 24, "y": 22 },
+      "label": "液压管路油污"
     }
   ]
 }

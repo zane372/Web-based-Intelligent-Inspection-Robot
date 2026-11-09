@@ -5,10 +5,12 @@
 namespace patrol {
 
 PerceptionService::PerceptionService(PerceptionConfig config,
-                                     std::string instanceId, Grid grid)
+                                     std::string instanceId, Grid grid,
+                                     std::uint32_t rngSeed)
     : config_(std::move(config)),
       instanceId_(instanceId),
       grid_(std::move(grid)),
+      rng_(rngSeed == 0 ? std::random_device{}() : rngSeed),
       lastInstanceId_(std::move(instanceId)) {}
 
 void PerceptionService::observe(const std::string& instanceId, int sequence,
@@ -32,6 +34,12 @@ void PerceptionService::observe(const std::string& instanceId, int sequence,
     // 去重：忽略同实例下更旧或重复的观察。
     if (sequence <= lastObservedSequence_) return;
     lastObservedSequence_ = sequence;
+
+    // RESET：重新随机化异常源位置（修复位置固定不变的缺陷），
+    // 在本次观察计算前应用，使 reset 快照立即反映新位置。
+    if (lastResult == LastResult::Reset) {
+        randomizeHazardsLocked();
+    }
 
     // 1) 三向测距。
     const std::vector<RangeReading> ranges =
@@ -76,6 +84,26 @@ void PerceptionService::observe(const std::string& instanceId, int sequence,
     activeDetections_ = detections;
     latest_ = PerceptionObservation{sequence, config_.rangeCells, ranges,
                                     detections};
+}
+
+std::vector<Position> PerceptionService::hazardPositions() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<Position> out;
+    out.reserve(config_.hazards.size());
+    for (const Hazard& h : config_.hazards) {
+        out.push_back(h.position);
+    }
+    return out;
+}
+
+void PerceptionService::randomizeHazardsLocked() {
+    const auto positions = sampleHazardPositions(config_.hazards, grid_, rng_);
+    if (positions.size() != config_.hazards.size()) {
+        return;  // 可通行格不足（真值配置下不会发生），保持原位。
+    }
+    for (std::size_t i = 0; i < config_.hazards.size(); ++i) {
+        config_.hazards[i].position = positions[i];
+    }
 }
 
 PerceptionLatestView PerceptionService::latest() const {

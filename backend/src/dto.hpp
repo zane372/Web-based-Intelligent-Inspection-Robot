@@ -148,6 +148,7 @@ inline std::string hazardTypeToString(HazardType t) {
         case HazardType::Smoke:    return "SMOKE";
         case HazardType::HighTemp: return "HIGH_TEMP";
         case HazardType::GasLeak:  return "GAS_LEAK";
+        case HazardType::OilLeak:  return "OIL_LEAK";
     }
     return "SMOKE";
 }
