@@ -47,27 +47,58 @@ FetchContent_MakeAvailable(googletest)
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(Threads REQUIRED)
 
-# ---- 核心静态库：domain + control + api + config + dto ----
-add_library(patrol_core STATIC
+# ---- 依赖分层（SPEC 5.4）：
+#   patrol_domain     -> 仅 C++ 标准库
+#   patrol_control    -> patrol_domain（+ Threads）
+#   patrol_perception -> patrol_domain（M2 加入）
+#   patrol_api        -> patrol_control + patrol_perception + Crow + json + Boost
+#   patrol_server     -> patrol_api + 配置加载 + 依赖组装
+# ----
+
+# patrol_domain：地图、机器人、巡检规划。链接依赖中不得出现 Crow/Boost/json。
+add_library(patrol_domain STATIC
   src/domain/grid.cpp
   src/domain/robot.cpp
   src/domain/patrol_planner.cpp
+)
+target_include_directories(patrol_domain PUBLIC src)
+
+# patrol_control：机器人控制与巡检执行。仅标准库 + Threads。
+add_library(patrol_control STATIC
+  src/control/patrol_executor.cpp
   src/control/robot_controller.cpp
+)
+target_include_directories(patrol_control PUBLIC src)
+target_link_libraries(patrol_control PUBLIC
+  patrol_domain
+  Threads::Threads
+)
+
+# patrol_perception：虚拟感知（规则纯函数 + 观察/事件服务）。仅标准库。
+add_library(patrol_perception STATIC
+  src/perception/perception_service.cpp
+)
+target_include_directories(patrol_perception PUBLIC src)
+target_link_libraries(patrol_perception PUBLIC patrol_domain)
+
+# patrol_api：DTO、配置、命令解析与 HTTP 路由。
+add_library(patrol_api STATIC
   src/config.cpp
   src/api/command_parser.cpp
   src/api/http_server.cpp
 )
-target_include_directories(patrol_core PUBLIC src)
-target_link_libraries(patrol_core PUBLIC
+target_include_directories(patrol_api PUBLIC src)
+target_link_libraries(patrol_api PUBLIC
+  patrol_control
+  patrol_perception
   nlohmann_json::nlohmann_json
   Crow::Crow
   Boost::system
-  Threads::Threads
 )
 
 # ---- 可执行文件 ----
 add_executable(patrol_server src/main.cpp)
-target_link_libraries(patrol_server PRIVATE patrol_core)
+target_link_libraries(patrol_server PRIVATE patrol_api)
 
 # ---- 单元测试 ----
 enable_testing()
@@ -76,6 +107,15 @@ add_executable(domain_tests
   tests/controller_tests.cpp
   tests/command_parser_tests.cpp
   tests/patrol_planner_tests.cpp
+  tests/config_tests.cpp
 )
-target_link_libraries(domain_tests PRIVATE patrol_core GTest::gtest_main)
+target_link_libraries(domain_tests PRIVATE patrol_api GTest::gtest_main)
 add_test(NAME domain_tests COMMAND domain_tests)
+
+# 感知纯规则与服务测试：仅依赖 patrol_perception（+ GoogleTest），
+# 不启动 HTTP、不依赖 Crow/Boost（SPEC 5.4 / 5.8）。
+add_executable(perception_tests
+  tests/perception_tests.cpp
+)
+target_link_libraries(perception_tests PRIVATE patrol_perception GTest::gtest_main)
+add_test(NAME perception_tests COMMAND perception_tests)

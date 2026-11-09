@@ -11,6 +11,7 @@ services:
       APP_PORT: "8080"
       MAP_CONFIG: /app/config/map.json
       STATIC_ROOT: /app/web
+      PERCEPTION_CONFIG: /app/config/perception.json
     restart: unless-stopped
     init: true
     security_opt:

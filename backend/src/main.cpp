@@ -11,6 +11,7 @@
 #include "control/robot_controller.hpp"
 #include "domain/grid.hpp"
 #include "domain/robot.hpp"
+#include "perception/perception_service.hpp"
 
 namespace patrol {
 namespace {
@@ -58,13 +59,44 @@ int main() {
     Robot robot(config.initialPosition, config.initialHeading);
     RobotController controller(grid, robot, "robot-1", makeInstanceId());
 
+    // 虚拟感知：未设 PERCEPTION_CONFIG 时关闭；非法配置非零退出（SPEC 6.2）。
+    PerceptionConfig perceptionConfig;
+    const std::string perceptionPath = envOr("PERCEPTION_CONFIG", "");
+    if (!perceptionPath.empty()) {
+        try {
+            perceptionConfig = loadPerceptionConfig(perceptionPath, config);
+        } catch (const std::exception& e) {
+            std::cerr << "[patrol_server] 感知配置加载失败: " << e.what() << '\n';
+            return 1;
+        }
+    }
+    PerceptionService perception(perceptionConfig, controller.snapshot().instanceId,
+                                 grid);
+
+    // 接线：每次命令执行 / 巡检步推进后，以已确认快照通知感知服务
+    // （观察在控制器锁外完成，不嵌套感知锁，AR-CON-006/007）。
+    controller.setObserver(
+        [&perception](const RobotSnapshot& snap) {
+            perception.observe(snap.instanceId, snap.sequence, snap.position,
+                               snap.heading, snap.lastResult);
+        });
+
+    // 初态观察（sequence=0，SPEC 6.5）。
+    {
+        const RobotSnapshot initial = controller.snapshot();
+        perception.observe(initial.instanceId, initial.sequence,
+                           initial.position, initial.heading, initial.lastResult);
+    }
+
     std::cout << "[patrol_server] mapId=" << config.mapId
               << " size=" << config.width << 'x' << config.height
               << " obstacles=" << config.obstacles.size()
               << " initial=(" << config.initialPosition.x << ','
               << config.initialPosition.y << ") staticRoot=" << staticRoot
-              << " listen=" << host << ':' << port << '\n';
+              << " listen=" << host << ':' << port
+              << " perception=" << (perceptionConfig.enabled ? "enabled" : "disabled")
+              << '\n';
 
-    runHttpServer(config, controller, staticRoot, host, port);
+    runHttpServer(config, controller, perception, staticRoot, host, port);
     return 0;
 }

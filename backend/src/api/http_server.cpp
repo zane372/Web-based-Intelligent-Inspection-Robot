@@ -2,9 +2,13 @@
 
 #include <atomic>
 #include <cctype>
+#include <cerrno>
+#include <climits>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -88,6 +92,39 @@ crow::response jsonError(int status, const std::string& code,
                          const nlohmann::json& details = nlohmann::json::object()) {
     return jsonResponse(status, errorToJson(code, message, requestId, details).dump(),
                         false);
+}
+
+// 只读资源共用的方法检查：请求非 GET/HEAD 时返回已填充的 405 响应，
+// 合法时返回 nullopt。调用方 `if (auto err = rejectIfNotGetOrHead(req)) return *err;`
+// 即可避免在每个 GET 路由重复方法判断（SPEC 5.6 公共错误处理）。
+std::optional<crow::response> rejectIfNotGetOrHead(const crow::request& req) {
+    if (req.method != crow::HTTPMethod::GET &&
+        req.method != crow::HTTPMethod::HEAD) {
+        crow::response res = jsonError(405, "METHOD_NOT_ALLOWED",
+                                       "资源不支持该 HTTP 方法", makeRequestId());
+        res.set_header("Allow", "GET, HEAD");
+        return res;
+    }
+    return std::nullopt;
+}
+
+// 严格十进制整数解析（SPEC 5.6：查询参数显式校验，禁止 atoi）。
+// 空串 / 非数字字符 / 越界均返回 false。
+bool parseStrictInt(const std::string& s, int& out) {
+    if (s.empty()) {
+        return false;
+    }
+    errno = 0;
+    char* end = nullptr;
+    const long value = std::strtol(s.c_str(), &end, 10);
+    if (errno != 0 || end == s.c_str() || *end != '\0') {
+        return false;
+    }
+    if (value < INT_MIN || value > INT_MAX) {
+        return false;
+    }
+    out = static_cast<int>(value);
+    return true;
 }
 
 // 命令体解析错误码 -> HTTP 错误映射（均为 400）。
@@ -201,6 +238,8 @@ const ApiRouteSpec kApiRoutes[] = {
     {"/api/v1/map", "GET, HEAD"},
     {"/api/v1/robot", "GET, HEAD"},
     {"/api/v1/robot/commands", "POST"},
+    {"/api/v1/perception/latest", "GET, HEAD"},
+    {"/api/v1/perception/events", "GET, HEAD"},
 };
 
 const ApiRouteSpec* findApiRoute(const std::string& fullPath) {
@@ -216,6 +255,7 @@ const ApiRouteSpec* findApiRoute(const std::string& fullPath) {
 
 void runHttpServer(const MapConfig& config,
                    RobotController& controller,
+                   PerceptionService& perception,
                    const std::string& staticRoot,
                    const std::string& host,
                    int port) {
@@ -224,15 +264,8 @@ void runHttpServer(const MapConfig& config,
     // ---- GET /api/v1/health ----
     CROW_ROUTE(app, "/api/v1/health")
     .methods(CROW_METHODS_ALL)
-    ([&controller, &config](const crow::request& req) {
-        if (req.method != crow::HTTPMethod::GET &&
-            req.method != crow::HTTPMethod::HEAD) {
-            crow::response res = jsonError(405, "METHOD_NOT_ALLOWED",
-                                           "资源不支持该 HTTP 方法",
-                                           makeRequestId());
-            res.set_header("Allow", "GET, HEAD");
-            return res;
-        }
+    ([&controller](const crow::request& req) {
+        if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
         const bool head = (req.method == crow::HTTPMethod::HEAD);
         const std::string body =
             nlohmann::json{{"status", "ok"}, {"instanceId", controller.snapshot().instanceId}}.dump();
@@ -243,14 +276,7 @@ void runHttpServer(const MapConfig& config,
     CROW_ROUTE(app, "/api/v1/map")
     .methods(CROW_METHODS_ALL)
     ([&config](const crow::request& req) {
-        if (req.method != crow::HTTPMethod::GET &&
-            req.method != crow::HTTPMethod::HEAD) {
-            crow::response res = jsonError(405, "METHOD_NOT_ALLOWED",
-                                           "资源不支持该 HTTP 方法",
-                                           makeRequestId());
-            res.set_header("Allow", "GET, HEAD");
-            return res;
-        }
+        if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
         const bool head = (req.method == crow::HTTPMethod::HEAD);
         return jsonResponse(
             200,
@@ -263,17 +289,50 @@ void runHttpServer(const MapConfig& config,
     CROW_ROUTE(app, "/api/v1/robot")
     .methods(CROW_METHODS_ALL)
     ([&controller](const crow::request& req) {
-        if (req.method != crow::HTTPMethod::GET &&
-            req.method != crow::HTTPMethod::HEAD) {
-            crow::response res = jsonError(405, "METHOD_NOT_ALLOWED",
-                                           "资源不支持该 HTTP 方法",
-                                           makeRequestId());
-            res.set_header("Allow", "GET, HEAD");
-            return res;
-        }
+        if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
         const bool head = (req.method == crow::HTTPMethod::HEAD);
         return jsonResponse(200, robotSnapshotToJson(controller.snapshot()).dump(),
                             head);
+    });
+
+    // ---- GET /api/v1/perception/latest ----
+    CROW_ROUTE(app, "/api/v1/perception/latest")
+    .methods(CROW_METHODS_ALL)
+    ([&perception](const crow::request& req) {
+        if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
+        const bool head = (req.method == crow::HTTPMethod::HEAD);
+        return jsonResponse(
+            200, perceptionLatestToJson(perception.latest()).dump(), head);
+    });
+
+    // ---- GET /api/v1/perception/events ----
+    CROW_ROUTE(app, "/api/v1/perception/events")
+    .methods(CROW_METHODS_ALL)
+    ([&perception](const crow::request& req) {
+        if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
+        const bool head = (req.method == crow::HTTPMethod::HEAD);
+        const std::string requestId = makeRequestId();
+
+        // 查询参数显式校验（SPEC 6.7：after≥0 默认0，limit 1..100 默认50）。
+        int after = 0;
+        int limit = 50;
+        if (const char* afterParam = req.url_params.get("after")) {
+            if (!parseStrictInt(afterParam, after) || after < 0) {
+                return jsonError(400, "INVALID_QUERY_PARAMETER",
+                                 "after 必须是非负整数", requestId,
+                                 {{"field", "after"}});
+            }
+        }
+        if (const char* limitParam = req.url_params.get("limit")) {
+            if (!parseStrictInt(limitParam, limit) || limit < 1 || limit > 100) {
+                return jsonError(400, "INVALID_QUERY_PARAMETER",
+                                 "limit 必须在 [1, 100] 范围内", requestId,
+                                 {{"field", "limit"}});
+            }
+        }
+        return jsonResponse(
+            200, perceptionEventsToJson(perception.events(after, limit)).dump(),
+            head);
     });
 
     // ---- POST /api/v1/robot/commands ----

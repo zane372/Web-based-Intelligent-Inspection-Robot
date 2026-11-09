@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "enabled": true,
+  "rangeCells": 5,
+  "hazardRangeCells": 2,
+  "hazards": [
+    {
+      "id": "smoke-01",
+      "type": "SMOKE",
+      "severity": "HIGH",
+      "position": { "x": 3, "y": 3 },
+      "label": "配电区域烟雾"
+    },
+    {
+      "id": "temp-01",
+      "type": "HIGH_TEMP",
+      "severity": "MEDIUM",
+      "position": { "x": 12, "y": 12 },
+      "label": "电机舱高温"
+    },
+    {
+      "id": "gas-01",
+      "type": "GAS_LEAK",
+      "severity": "LOW",
+      "position": { "x": 18, "y": 18 },
+      "label": "管道轻微泄漏"
+    }
+  ]
+}

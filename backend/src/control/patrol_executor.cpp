@@ -1,0 +1,138 @@
+#include "control/patrol_executor.hpp"
+
+#include <utility>
+
+#include "domain/patrol_planner.hpp"
+
+namespace patrol {
+
+void PatrolExecutor::start(std::vector<Direction> path, std::mutex& mutex,
+                           Robot& robot, const Grid& grid, int& sequence) {
+    patrolPath_ = std::move(path);
+    patrolIndex_ = 0;
+    active_ = true;
+    thread_ = std::thread(&PatrolExecutor::loop, this, std::ref(mutex),
+                          std::ref(robot), std::ref(grid), std::ref(sequence));
+}
+
+std::thread PatrolExecutor::stopAndTakeThread() {
+    active_ = false;
+    cv_.notify_all();
+    std::thread t;
+    if (thread_.joinable()) {
+        t = std::move(thread_);
+    }
+    return t;
+}
+
+void PatrolExecutor::setIdentity(std::string robotId, std::string instanceId) {
+    robotId_ = std::move(robotId);
+    instanceId_ = std::move(instanceId);
+}
+
+void PatrolExecutor::setOnStep(
+    std::function<void(const RobotSnapshot&)> callback) {
+    onStep_ = std::move(callback);
+}
+
+RobotSnapshot PatrolExecutor::buildSnapshotLocked(const Robot& robot,
+                                                  int sequence) const {
+    RobotSnapshot s;
+    s.robotId = robotId_;
+    s.instanceId = instanceId_;
+    s.position = robot.position();
+    s.heading = robot.heading();
+    s.motionStatus = robot.motionStatus();
+    s.lastResult = robot.lastResult();
+    s.sequence = sequence;
+    s.patrolActive = active_;
+    return s;
+}
+
+bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
+                                   Robot& robot, const Grid& grid,
+                                   int& sequence) {
+    if (!active_) {
+        return false;
+    }
+    if (patrolIndex_ >= patrolPath_.size()) {
+        active_ = false;
+        cv_.notify_all();
+        robot.setMotionStatus(MotionStatus::Idle);
+        robot.setLastResult(LastResult::PatrolCompleted);
+        return false;
+    }
+    const Direction dir = patrolPath_[patrolIndex_];
+    // 防御性障碍/边界检测：规划路径本应避开障碍，若异常命中（如陈旧路径）
+    // 则报警 BLOCKED_OBSTACLE/BLOCKED_BOUNDARY，并从当前位置重规划剩余路径。
+    const Position d = delta(dir);
+    const Position candidate{robot.position().x + d.x, robot.position().y + d.y};
+    if (!grid.contains(candidate) || grid.isObstacle(candidate)) {
+        // 复刻 applyManualMove 的「先更新朝向」规则：受阻也更新朝向。
+        robot.setHeading(dir);
+        robot.setMotionStatus(MotionStatus::Blocked);
+        robot.setLastResult(grid.contains(candidate)
+                                ? LastResult::BlockedObstacle
+                                : LastResult::BlockedBoundary);
+        ++sequence;
+        // 全图规划为 O(N²) 且伴随堆分配，移出临界区执行（AR-CON-002/003）。
+        const Position from = robot.position();
+        lock.unlock();
+        std::vector<Direction> path = planPatrolPath(grid, from);
+        lock.lock();
+        if (!active_) {
+            return false;  // 重规划期间巡检被停止。
+        }
+        if (!(robot.position() == from)) {
+            // 位置被并发移动（罕见）：就地重规划。
+            path = planPatrolPath(grid, robot.position());
+        }
+        patrolPath_ = std::move(path);
+        patrolIndex_ = 0;
+        if (patrolPath_.empty()) {
+            // 无可遍历路径：视为巡检完成。
+            active_ = false;
+            cv_.notify_all();
+            robot.setMotionStatus(MotionStatus::Idle);
+            robot.setLastResult(LastResult::PatrolCompleted);
+            return false;
+        }
+        return true;
+    }
+    ++patrolIndex_;
+    robot.applyManualMove(dir, grid);
+    ++sequence;
+    if (patrolIndex_ >= patrolPath_.size()) {
+        // 最后一步执行完毕：标记完成，但仍返回 true 表示本步已推进。
+        active_ = false;
+        cv_.notify_all();
+        robot.setMotionStatus(MotionStatus::Idle);
+        robot.setLastResult(LastResult::PatrolCompleted);
+    }
+    return true;
+}
+
+void PatrolExecutor::loop(std::mutex& mutex, Robot& robot, const Grid& grid,
+                          int& sequence) {
+    std::unique_lock<std::mutex> lock(mutex);
+    while (active_) {
+        cv_.wait_for(lock, intervalMs_.load(), [this] { return !active_; });
+        if (!active_) {
+            break;
+        }
+        // stepReplanned 以锁被持有的状态进入，内部仅在规划时短暂释放锁。
+        const bool keepGoing = stepReplanned(lock, robot, grid, sequence);
+        // 在锁内捕获已确认快照，再于锁外通知（AR-CON-006/007）。
+        const RobotSnapshot snap = buildSnapshotLocked(robot, sequence);
+        lock.unlock();
+        if (onStep_) {
+            onStep_(snap);
+        }
+        if (!keepGoing) {
+            break;  // 锁已释放，线程退出。
+        }
+        lock.lock();
+    }
+}
+
+}  // namespace patrol
