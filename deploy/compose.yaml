@@ -1,0 +1,33 @@
+# 按镜像摘要部署的 Compose 配置（SPEC 9.5）。
+# 与根 docker-compose.yml 的区别：不构建镜像，而是通过 APP_IMAGE 接收
+# 已推送 GHCR 的完整 `image@digest`（部署唯一输入，禁用可变标签）。
+# 保留当前非 root（镜像内 USER app / UID 10001）、健康检查、端口与只读
+# 地图配置（配置随镜像 COPY 进入，不挂载可写卷）要求。
+#
+# 用法（部署主机，无需 clone 源码仓库）：
+#   APP_IMAGE=ghcr.io/<owner>/<repo>@sha256:<digest> \
+#     docker compose -f deploy/compose.yaml up -d
+services:
+  app:
+    image: ${APP_IMAGE:?APP_IMAGE 必须为完整 image@digest（如 ghcr.io/owner/repo@sha256:...）}
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8080"
+      MAP_CONFIG: /app/config/map.json
+      STATIC_ROOT: /app/web
+      PERCEPTION_CONFIG: /app/config/perception.json
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s

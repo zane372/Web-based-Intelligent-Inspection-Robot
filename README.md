@@ -58,6 +58,7 @@
 │   └── images/             # 规格编制依据参考图
 ├── .github/workflows/ci.yml
 ├── .github/workflows/cd.yml
+├── deploy/compose.yaml      # 按镜像摘要部署的 Compose 配置（APP_IMAGE=image@digest）
 ├── Dockerfile
 ├── docker-compose.yml
 ├── README.md               # 项目说明（本文件）

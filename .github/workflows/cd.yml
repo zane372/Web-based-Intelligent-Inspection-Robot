@@ -119,8 +119,9 @@ jobs:
         run: |
           # 需要 Staging Environment 配置 DEPLOY_HOST/DEPLOY_USER/DEPLOY_SSH_KEY。
           # APP_IMAGE 传入完整 image@digest；运行主机只拉取镜像，不 clone 源码（SPEC 9.5）。
+          # 部署命令形态：APP_IMAGE="<digest>" docker compose -f deploy/compose.yaml up -d
           echo "部署目标未配置——跳过真实 SSH 部署（流程骨架，未验证）"
-          echo "would deploy digest: ${{ needs.build-and-push.outputs.image_digest }}"
+          echo "would deploy digest: ${{ needs.build-and-push.outputs.image_digest }} (via deploy/compose.yaml)"
 
       - name: Staging 完整冒烟（有副作用 pytest 只在 Staging，SPEC 9.6.5）
         env:
@@ -159,8 +160,9 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
+          # 部署命令形态：APP_IMAGE="<digest>" docker compose -f deploy/compose.yaml up -d
           echo "部署目标未配置——跳过真实 SSH 部署（流程骨架，未验证）"
-          echo "would deploy digest: ${{ github.event.inputs.image_digest }}"
+          echo "would deploy digest: ${{ github.event.inputs.image_digest }} (via deploy/compose.yaml)"
 
       - name: Production 只读冒烟（不跑 RESET/MOVE/START PATROL 等有副作用测试，SPEC 9.6.4）
         env:
@@ -196,8 +198,9 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
+          # 回滚命令形态：APP_IMAGE="<旧 digest>" docker compose -f deploy/compose.yaml up -d
           echo "部署目标未配置——跳过真实 SSH 回滚（流程骨架，未验证）"
-          echo "would rollback to: ${{ github.event.inputs.image_digest }}"
+          echo "would rollback to: ${{ github.event.inputs.image_digest }} (via deploy/compose.yaml)"
 
       - name: 回滚后只读冒烟
         env:
