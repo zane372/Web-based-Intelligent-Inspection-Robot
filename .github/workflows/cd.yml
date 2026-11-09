@@ -1,0 +1,213 @@
+name: cd
+
+# CD 工作流（SPEC 9.4/9.6）：
+# - 持续预发布：main 上 base-ci 成功后由 workflow_run 触发，构建并冒烟镜像、推 GHCR、部署 Staging。
+# - 生产提升/回滚：一律由人工 workflow_dispatch 触发（操作者复制已通过 Staging 的 digest），
+#   production Environment 强制人工审批。
+# 参考部署目标是「支持 SSH 的单机 Docker 主机」。本仓库当前无真实部署环境，部署步骤为已配置的
+# 流程骨架，未经过真实环境验证（SPEC 9.8 诚实要求，不虚构成功运行记录）。
+on:
+  workflow_run:
+    workflows: [base-ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "部署动作"
+        type: choice
+        required: true
+        default: promote
+        options:
+          - promote
+          - rollback
+      image_digest:
+        description: "完整镜像 digest（ghcr.io/...@sha256:...），promote 与 rollback 均必填"
+        type: string
+        required: true
+      reason:
+        description: "部署或回滚原因"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # GHCR 路径使用小写仓库名（SPEC 9.5）。
+  IMAGE: ghcr.io/zane372/web-based-intelligent-inspection-robot
+
+jobs:
+  build-and-push:
+    # 仅当 main 上 base-ci 成功完成时触发持续预发布；workflow_dispatch 不构建。
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_digest: ${{ steps.push.outputs.image_digest }}
+      source_sha: ${{ steps.verify.outputs.sha }}
+    steps:
+      - name: 核对触发运行（拒绝 PR、跨仓库、分支不符，SPEC 9.4）
+        id: verify
+        run: |
+          set -euo pipefail
+          repo="${{ github.event.workflow_run.head_repository.full_name }}"
+          branch="${{ github.event.workflow_run.head_branch }}"
+          sha="${{ github.event.workflow_run.head_sha }}"
+          if [ "$repo" != "${{ github.repository }}" ]; then
+            echo "refusing: head_repository '$repo' != '${{ github.repository }}'"
+            exit 1
+          fi
+          if [ "$branch" != "main" ]; then
+            echo "refusing: head_branch '$branch' != 'main'"
+            exit 1
+          fi
+          if [ -z "$sha" ]; then
+            echo "refusing: empty head_sha"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.verify.outputs.sha }}
+
+      - name: 登录 GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: 构建镜像
+        run: docker build -t "$IMAGE:sha-${{ steps.verify.outputs.sha }}" .
+
+      - name: 推送前冒烟（生产等价入口：健康 + 首页，SPEC 9.5）
+        run: |
+          set -euo pipefail
+          docker compose up --build -d
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/v1/health > /dev/null; then ok=1; break; fi
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then echo "container did not become healthy"; docker compose down; exit 1; fi
+          curl -fsS http://127.0.0.1:8080/ > /dev/null
+          docker compose down
+
+      - name: 推送并记录 digest
+        id: push
+        run: |
+          set -euo pipefail
+          ref="$IMAGE:sha-${{ steps.verify.outputs.sha }}"
+          docker push "$ref"
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$ref")"
+          echo "image_digest=$digest" >> "$GITHUB_OUTPUT"
+
+  staging:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    needs: build-and-push
+    runs-on: ubuntu-24.04
+    environment: staging
+    concurrency:
+      group: cd-staging
+      cancel-in-progress: false
+    steps:
+      - name: 部署 Staging（按 digest，不在部署机重编译，SPEC 9.6）
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          # 需要 Staging Environment 配置 DEPLOY_HOST/DEPLOY_USER/DEPLOY_SSH_KEY。
+          # APP_IMAGE 传入完整 image@digest；运行主机只拉取镜像，不 clone 源码（SPEC 9.5）。
+          echo "部署目标未配置——跳过真实 SSH 部署（流程骨架，未验证）"
+          echo "would deploy digest: ${{ needs.build-and-push.outputs.image_digest }}"
+
+      - name: Staging 完整冒烟（有副作用 pytest 只在 Staging，SPEC 9.6.5）
+        env:
+          STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+        run: |
+          base="${STAGING_BASE_URL:-http://127.0.0.1:8080}"
+          echo "would run: pytest tests/integration --base-url $base"
+
+      - name: 记录发布运行
+        run: |
+          echo "source_sha=${{ needs.build-and-push.outputs.source_sha }}"
+          echo "image_digest=${{ needs.build-and-push.outputs.image_digest }}"
+          echo "environment=staging"
+          echo "operator=${{ github.actor }}"
+
+  promote-production:
+    # 生产提升只能人工 workflow_dispatch（操作者复制已通过 Staging 的 digest），
+    # production Environment 强制人工审批（SPEC 9.4/9.6）。
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'promote'
+    runs-on: ubuntu-24.04
+    environment: production
+    concurrency:
+      group: cd-production
+      # 生产串行部署，禁止两个版本同时操作同一容器（SPEC 9.4）。
+      cancel-in-progress: false
+    steps:
+      - name: 记录回滚点（当前可用 digest）
+        run: |
+          # 部署前记录上一健康 digest 作为回滚目标（SPEC 9.6.2）。
+          echo "new_digest=${{ github.event.inputs.image_digest }}"
+          echo "rollback_target=由部署记录取当前 production 已部署 digest"
+
+      - name: 部署 Production（按 digest）
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          echo "部署目标未配置——跳过真实 SSH 部署（流程骨架，未验证）"
+          echo "would deploy digest: ${{ github.event.inputs.image_digest }}"
+
+      - name: Production 只读冒烟（不跑 RESET/MOVE/START PATROL 等有副作用测试，SPEC 9.6.4）
+        env:
+          PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+        run: |
+          base="${PRODUCTION_BASE_URL:-http://127.0.0.1:8080}"
+          echo "would check (readonly): $base/api/v1/health, /api/v1/map, /api/v1/robot, / 首页, 静态资源"
+
+      - name: 记录发布运行
+        run: |
+          echo "image_digest=${{ github.event.inputs.image_digest }}"
+          echo "environment=production"
+          echo "operator=${{ github.actor }}"
+          echo "reason=${{ github.event.inputs.reason }}"
+
+  rollback:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'rollback'
+    runs-on: ubuntu-24.04
+    environment: production
+    concurrency:
+      group: cd-production
+      cancel-in-progress: false
+    steps:
+      - name: 校验回滚 digest
+        run: |
+          d="${{ github.event.inputs.image_digest }}"
+          if [ -z "$d" ]; then echo "回滚必须提供 image_digest"; exit 1; fi
+          echo "rollback digest: $d"
+
+      - name: 部署回滚（按旧 digest，SPEC 9.6）
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          echo "部署目标未配置——跳过真实 SSH 回滚（流程骨架，未验证）"
+          echo "would rollback to: ${{ github.event.inputs.image_digest }}"
+
+      - name: 回滚后只读冒烟
+        env:
+          PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+        run: |
+          echo "would check (readonly): ${PRODUCTION_BASE_URL:-http://127.0.0.1:8080}/api/v1/health"
+
+      - name: 记录回滚运行
+        run: |
+          echo "image_digest=${{ github.event.inputs.image_digest }}"
+          echo "environment=production"
+          echo "operator=${{ github.actor }}"
+          echo "reason=${{ github.event.inputs.reason }}"
