@@ -99,8 +99,12 @@ export function reduce(state: AppState, event: AppEvent): AppState {
       if (prev && event.robot.sequence < prev.sequence) {
         return state;
       }
-      // 命令执行中收到轮询：只更新数据，保持 EXECUTING 以免按钮提前放开。
-      const ui: UiState = state.ui === "EXECUTING" ? "EXECUTING" : "READY";
+      // 命令执行中或边界/障碍反馈展示期间收到轮询：只更新数据，保持当前
+      // UI 态以免按钮提前放开或反馈文案被 1s 轮询秒覆盖（反馈由 1.5s 定时器收尾）。
+      const ui: UiState =
+        state.ui === "EXECUTING" || state.ui === "BOUNDARY_FEEDBACK"
+          ? state.ui
+          : "READY";
       return {
         ...state,
         ui,

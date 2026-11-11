@@ -134,6 +134,25 @@ describe("state reducer", () => {
     expect(s2.robot?.sequence).toBe(1);
   });
 
+  it("BOUNDARY_FEEDBACK 期间轮询只更新数据不改变状态（反馈不被 1s 轮询覆盖）", () => {
+    const s0 = reduce(createInitialState(), { type: "loaded", map, robot: robot() });
+    const s1 = reduce(s0, { type: "commandStart" });
+    const s2 = reduce(s1, {
+      type: "commandDone",
+      robot: robot({ sequence: 1, motionStatus: "BLOCKED", lastResult: "BLOCKED_BOUNDARY" }),
+      result: "BLOCKED_BOUNDARY",
+    });
+    expect(s2.ui).toBe("BOUNDARY_FEEDBACK");
+    const s3 = reduce(s2, {
+      type: "pollOk",
+      robot: robot({ sequence: 1, motionStatus: "BLOCKED", lastResult: "BLOCKED_BOUNDARY" }),
+    });
+    expect(s3.ui).toBe("BOUNDARY_FEEDBACK");
+    expect(s3.robot?.sequence).toBe(1);
+    // 反馈展示期结束由 feedbackTimeout 收尾到 READY。
+    expect(reduce(s3, { type: "feedbackTimeout" }).ui).toBe("READY");
+  });
+
   it("命令发送失败后 commandFailed 回到 READY（不再卡死 EXECUTING）", () => {
     const s0 = reduce(createInitialState(), { type: "loaded", map, robot: robot() });
     const s1 = reduce(s0, { type: "commandStart" });
