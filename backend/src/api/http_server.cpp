@@ -85,9 +85,10 @@ bool isJsonContentType(const std::string& contentType) {
     return value == "application/json";
 }
 
-// 构造 JSON 响应；head 为 true 时只返回头不返回体（供 HEAD 请求）。
-crow::response jsonResponse(int code, const std::string& body, bool head) {
-    crow::response res(code, head ? std::string{} : body);
+// 构造 JSON 响应。始终携带完整 body：HEAD 请求由 Crow 的 skip_body 机制
+// 剥除响应体但保留 Content-Length（RFC 9110 §9.3.2 要求 HEAD 响应头与 GET 一致）。
+crow::response jsonResponse(int code, const std::string& body) {
+    crow::response res(code, body);
     res.set_header("Content-Type", "application/json; charset=utf-8");
     return res;
 }
@@ -96,8 +97,7 @@ crow::response jsonError(int status, const std::string& code,
                          const std::string& message,
                          const std::string& requestId,
                          const nlohmann::json& details = nlohmann::json::object()) {
-    return jsonResponse(status, errorToJson(code, message, requestId, details).dump(),
-                        false);
+    return jsonResponse(status, errorToJson(code, message, requestId, details).dump());
 }
 
 // 只读资源共用的方法检查：请求非 GET/HEAD 时返回已填充的 405 响应，
@@ -298,10 +298,9 @@ void runHttpServer(const MapConfig& config,
     .methods(CROW_METHODS_ALL)
     ([&controller](const crow::request& req) {
         if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
-        const bool head = (req.method == crow::HTTPMethod::HEAD);
         const std::string body =
             nlohmann::json{{"status", "ok"}, {"instanceId", controller.snapshot().instanceId}}.dump();
-        return jsonResponse(200, body, head);
+        return jsonResponse(200, body);
     });
 
     // ---- GET /api/v1/map ----
@@ -309,12 +308,10 @@ void runHttpServer(const MapConfig& config,
     .methods(CROW_METHODS_ALL)
     ([&config](const crow::request& req) {
         if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
-        const bool head = (req.method == crow::HTTPMethod::HEAD);
         return jsonResponse(
             200,
             mapInfoToJson(config.mapId, config.width, config.height, config.obstacles)
-                .dump(),
-            head);
+                .dump());
     });
 
     // ---- GET /api/v1/robot ----
@@ -322,9 +319,7 @@ void runHttpServer(const MapConfig& config,
     .methods(CROW_METHODS_ALL)
     ([&controller](const crow::request& req) {
         if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
-        const bool head = (req.method == crow::HTTPMethod::HEAD);
-        return jsonResponse(200, robotSnapshotToJson(controller.snapshot()).dump(),
-                            head);
+        return jsonResponse(200, robotSnapshotToJson(controller.snapshot()).dump());
     });
 
     // ---- GET /api/v1/perception/latest ----
@@ -332,9 +327,8 @@ void runHttpServer(const MapConfig& config,
     .methods(CROW_METHODS_ALL)
     ([&perception](const crow::request& req) {
         if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
-        const bool head = (req.method == crow::HTTPMethod::HEAD);
         return jsonResponse(
-            200, perceptionLatestToJson(perception.latest()).dump(), head);
+            200, perceptionLatestToJson(perception.latest()).dump());
     });
 
     // ---- GET /api/v1/perception/events ----
@@ -342,7 +336,6 @@ void runHttpServer(const MapConfig& config,
     .methods(CROW_METHODS_ALL)
     ([&perception](const crow::request& req) {
         if (auto err = rejectIfNotGetOrHead(req)) return std::move(*err);
-        const bool head = (req.method == crow::HTTPMethod::HEAD);
         const std::string requestId = makeRequestId();
 
         // 查询参数显式校验（SPEC 6.7：after≥0 默认0，limit 1..100 默认50）。
@@ -369,8 +362,7 @@ void runHttpServer(const MapConfig& config,
             }
         }
         return jsonResponse(
-            200, perceptionEventsToJson(perception.events(after, limit)).dump(),
-            head);
+            200, perceptionEventsToJson(perception.events(after, limit)).dump());
     });
 
     // ---- POST /api/v1/robot/commands ----
@@ -422,7 +414,7 @@ void runHttpServer(const MapConfig& config,
             {"result", commandResultToString(outcome.result)},
             {"robot", robotSnapshotToJson(outcome.robot)},
         };
-        return jsonResponse(201, body.dump(), false);
+        return jsonResponse(201, body.dump());
     });
 
     // ---- 根路径 -> index.html ----
