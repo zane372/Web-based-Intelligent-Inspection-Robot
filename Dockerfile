@@ -1,5 +1,5 @@
 # 阶段一：前端构建
-FROM node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS web-build
+FROM node:26-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68 AS web-build
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # 阶段二：C++ 后端构建（Release + CTest）
-FROM gcc:12-bookworm@sha256:3d3af69c72edf0652bb3a829965142e81891899c7827d849bc3c0dbb9edd216a AS cpp-build
+FROM gcc:15-bookworm@sha256:9ca91b05c7b07d2979f16413e8b2cd6ec8a7c80ffca4121ccab0aeba33f90460 AS cpp-build
 WORKDIR /src
 RUN apt-get update \
     && apt-get install -y --no-install-recommends cmake ninja-build git ca-certificates libboost-system-dev libasio-dev \
