@@ -75,8 +75,9 @@ MapConfig loadMapConfig(const std::string& path) {
         throw std::runtime_error("initialRobot 初始位置越界");
     }
 
-    // 可选 obstacles 数组：每个元素 {x, y}，须在界内且不与初始位置重合。
+    // 可选 obstacles 数组：每个元素 {x, y}，须在界内且不与初始位置重合、彼此不重复。
     std::vector<Position> obstacles;
+    std::set<Position> seenObstacles;
     if (root.contains("obstacles")) {
         if (!root["obstacles"].is_array()) {
             throw std::runtime_error("obstacles 必须是数组");
@@ -92,6 +93,11 @@ MapConfig loadMapConfig(const std::string& path) {
             }
             if (pos == initialPosition) {
                 throw std::runtime_error("obstacles 不能与初始位置重合");
+            }
+            if (!seenObstacles.insert(pos).second) {
+                throw std::runtime_error("obstacles 元素坐标重复: (" +
+                                         std::to_string(pos.x) + "," +
+                                         std::to_string(pos.y) + ")");
             }
             obstacles.push_back(pos);
         }
