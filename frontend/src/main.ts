@@ -124,6 +124,9 @@ function dispatch(event: AppEvent): void {
 function dispatchPerception(action: PerceptionAction): void {
   perceptionState = reducePerception(perceptionState, action);
   renderPerception();
+  // 画布感知图层随 discovered 变化刷新：机器人轮询可能已停（DISCONNECTED/隐藏），
+  // 不能等下一次 render()，否则新发现的异常迟迟不上画布。
+  render();
   syncPerceptionPolling();
 }
 
@@ -268,6 +271,11 @@ function eventText(e: PerceptionEvent): string {
   }
 }
 
+// 感知面板两个列表的「渲染签名」：内容未变时跳过 DOM 重建，避免 aria-live 区域
+// 每秒整表重建带来的屏幕阅读器播报噪声。null 表示尚未渲染过（必须重建一次）。
+let lastAnomalyListKey: string | null = null;
+let lastEventListKey: string | null = null;
+
 function renderPerception(): void {
   const s = perceptionState;
   perceptionStatusEl!.textContent = perceptionStatusText(s);
@@ -288,47 +296,60 @@ function renderPerception(): void {
   }
 
   // 活动异常（只显示已发现的，即当前半径内的活动检测）。
-  anomalyListEl!.textContent = "";
-  if (s.activeDetections.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = "无";
-    li.className = "perception-empty";
-    anomalyListEl!.appendChild(li);
-  } else {
-    for (const d of s.activeDetections) {
+  const anomalyKey = s.activeDetections
+    .map(
+      (d) => `${d.hazardId}|${d.hazardType}|${d.position.x},${d.position.y}|${d.distanceCells}|${d.severity}`,
+    )
+    .join("\n");
+  if (lastAnomalyListKey === null || anomalyKey !== lastAnomalyListKey) {
+    lastAnomalyListKey = anomalyKey;
+    anomalyListEl!.textContent = "";
+    if (s.activeDetections.length === 0) {
       const li = document.createElement("li");
-      const dot = document.createElement("span");
-      dot.className = `anomaly-dot ${severityClass(d.severity)}`;
-      dot.setAttribute("aria-hidden", "true");
-      li.appendChild(dot);
-      li.appendChild(
-        document.createTextNode(
-          `${hazardTypeText(d.hazardType)}（${severityText(d.severity)}）@ ` +
-            `(${d.position.x},${d.position.y})，距离 ${d.distanceCells}`,
-        ),
-      );
+      li.textContent = "无";
+      li.className = "perception-empty";
       anomalyListEl!.appendChild(li);
+    } else {
+      for (const d of s.activeDetections) {
+        const li = document.createElement("li");
+        const dot = document.createElement("span");
+        dot.className = `anomaly-dot ${severityClass(d.severity)}`;
+        dot.setAttribute("aria-hidden", "true");
+        li.appendChild(dot);
+        li.appendChild(
+          document.createTextNode(
+            `${hazardTypeText(d.hazardType)}（${severityText(d.severity)}）@ ` +
+              `(${d.position.x},${d.position.y})，距离 ${d.distanceCells}`,
+          ),
+        );
+        anomalyListEl!.appendChild(li);
+      }
     }
   }
 
   // 感知事件（按 eventId 去重，最多 20 条，aria-live polite）。
-  eventListEl!.textContent = "";
-  if (s.truncated) {
-    const li = document.createElement("li");
-    li.textContent = "事件已截断，正在重建…";
-    li.className = "perception-empty";
-    eventListEl!.appendChild(li);
-  }
-  for (const e of s.events) {
-    const li = document.createElement("li");
-    li.textContent = `#${e.eventId} ${eventText(e)}`;
-    eventListEl!.appendChild(li);
-  }
-  if (s.events.length === 0 && !s.truncated) {
-    const li = document.createElement("li");
-    li.textContent = "暂无事件";
-    li.className = "perception-empty";
-    eventListEl!.appendChild(li);
+  // 事件仅追加且 eventId 唯一，用 eventId 序列作为签名，跳过无变化的整表重建。
+  const eventKey = `${s.truncated}|${s.events.map((e) => e.eventId).join(",")}`;
+  if (lastEventListKey === null || eventKey !== lastEventListKey) {
+    lastEventListKey = eventKey;
+    eventListEl!.textContent = "";
+    if (s.truncated) {
+      const li = document.createElement("li");
+      li.textContent = "事件已截断，正在重建…";
+      li.className = "perception-empty";
+      eventListEl!.appendChild(li);
+    }
+    for (const e of s.events) {
+      const li = document.createElement("li");
+      li.textContent = `#${e.eventId} ${eventText(e)}`;
+      eventListEl!.appendChild(li);
+    }
+    if (s.events.length === 0 && !s.truncated) {
+      const li = document.createElement("li");
+      li.textContent = "暂无事件";
+      li.className = "perception-empty";
+      eventListEl!.appendChild(li);
+    }
   }
 }
 
@@ -470,8 +491,8 @@ async function onCommand(type: CommandType, direction?: Heading): Promise<void> 
     window.clearTimeout(feedbackTimer);
     feedbackTimer = undefined;
   }
-  dispatch({ type: "commandStart" });
   try {
+    dispatch({ type: "commandStart" });
     const resp = await sendCommand(type, direction);
     dispatch({ type: "commandDone", robot: resp.robot, result: resp.result });
     if (resp.result === "BLOCKED_BOUNDARY" || resp.result === "BLOCKED_OBSTACLE") {
@@ -527,13 +548,15 @@ document.addEventListener("visibilitychange", () => {
     `(resolution: ${window.devicePixelRatio}dppx)`,
   );
   const onDprChange = (): void => {
+    // 先重新武装监听器再渲染：即便 render 抛错，后续 DPI 变化仍能触发重采样，
+    // 避免单次渲染异常导致监听器永久失联。
+    dprMedia.removeEventListener("change", onDprChange);
+    dprMedia = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    dprMedia.addEventListener("change", onDprChange);
     if (ctx !== null) {
       ctx = null;
       render();
     }
-    dprMedia.removeEventListener("change", onDprChange);
-    dprMedia = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-    dprMedia.addEventListener("change", onDprChange);
   };
   dprMedia.addEventListener("change", onDprChange);
 }
