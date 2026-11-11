@@ -195,7 +195,10 @@ function hitTypeText(hitType: HitType): string {
   }
 }
 
-function rangeText(r: RangeReading): string {
+function rangeText(r: RangeReading | undefined): string {
+  if (!r) {
+    return "—";
+  }
   if (r.hitType === "NONE" || r.distanceCells === null) {
     return hitTypeText(r.hitType);
   }
@@ -272,9 +275,9 @@ function renderPerception(): void {
     perceptionSequenceEl!.textContent = "—";
   } else {
     const byRel = new Map(obs.ranges.map((r) => [r.relativeDirection, r]));
-    rangeFrontEl!.textContent = rangeText(byRel.get("FRONT")!);
-    rangeLeftEl!.textContent = rangeText(byRel.get("LEFT")!);
-    rangeRightEl!.textContent = rangeText(byRel.get("RIGHT")!);
+    rangeFrontEl!.textContent = rangeText(byRel.get("FRONT"));
+    rangeLeftEl!.textContent = rangeText(byRel.get("LEFT"));
+    rangeRightEl!.textContent = rangeText(byRel.get("RIGHT"));
     perceptionSequenceEl!.textContent = String(obs.sequence);
   }
 
