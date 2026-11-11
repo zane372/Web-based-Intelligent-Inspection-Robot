@@ -4,13 +4,35 @@
 # 保留当前非 root（镜像内 USER app / UID 10001）、健康检查、端口与只读
 # 地图配置（配置随镜像 COPY 进入，不挂载可写卷）要求。
 #
-# 用法（部署主机，无需 clone 源码仓库）：
+# 新增 Traefik 反向代理作为对外入口（basicAuth 鉴权 + 请求体大小限制）。
+# 部署主机需同时具备本文件同级目录与 ../traefik/ 下的两份 Traefik 配置：
+#   - ../traefik/traefik.yml（静态配置）
+#   - ../traefik/dynamic.yml（动态配置：中间件 + 管理面板路由）
+#
+# 用法（部署主机，无需 clone 源码仓库，但需拷贝 traefik/ 配置目录）：
 #   APP_IMAGE=ghcr.io/<owner>/<repo>@sha256:<digest> \
 #     docker compose -f deploy/compose.yaml up -d
 services:
+  traefik:
+    image: traefik:v3.5
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      - "80:80"
+      - "127.0.0.1:8082:8082"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ../traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      - traefik-net
+
   app:
     image: ${APP_IMAGE:?APP_IMAGE 必须为完整 image@digest（如 ghcr.io/owner/repo@sha256:...）}
     ports:
+      # 仅宿主机回环直连（无鉴权），供部署主机本地调试；对外访问走 Traefik 80。
       - "127.0.0.1:${HOST_PORT:-8080}:8080"
     environment:
       APP_HOST: 0.0.0.0
@@ -39,3 +61,15 @@ services:
       timeout: 3s
       retries: 12
       start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.entrypoints=web"
+      - "traefik.http.routers.app.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.app.middlewares=app-auth@file,body-limit@file"
+      - "traefik.http.services.app.loadbalancer.server.port=8080"
+    networks:
+      - traefik-net
+
+networks:
+  traefik-net:
+    driver: bridge

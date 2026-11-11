@@ -1,0 +1,40 @@
+# Traefik v3 动态配置（路由、中间件），可热加载。
+# 官方参考：https://doc.traefik.io/traefik/reference/dynamic-configuration/file/
+#
+# 本文件只放「中间件 + Traefik 管理面板路由」；业务应用的路由与服务通过
+# docker-compose.yml 中 app 容器的 label 声明（由 Docker Provider 自动发现）。
+
+http:
+  # ---- 中间件 ----
+  middlewares:
+    # 请求体大小限制：与后端应用层 4096 字节上限对齐（防御纵深，超限在反代层即返回 413）。
+    # 对应 SPEC「公网边界」要求：反向代理层限制请求体大小。
+    body-limit:
+      buffering:
+        maxRequestBodyBytes: 4096
+
+    # 应用访问鉴权（对外入口）。默认账号 test / test（仅演示，部署前务必更换）。
+    # 生成新口令：htpasswd -nb <用户名> <密码>（取输出的 "用户名:哈希" 整段）。
+    app-auth:
+      basicAuth:
+        realm: "Patrol"
+        users:
+          - "test:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/"
+
+    # Traefik 管理面板鉴权（与上面独立，便于分开管理口令）。
+    dashboard-auth:
+      basicAuth:
+        realm: "Traefik Dashboard"
+        users:
+          - "test:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/"
+
+  # ---- 路由 ----
+  routers:
+    # Traefik 管理面板：挂在 dashboard 入口（仅宿主机回环 8082），指向内置 api@internal。
+    dashboard:
+      entryPoints:
+        - dashboard
+      rule: "PathPrefix(`/api`) || PathPrefix(`/dashboard`)"
+      service: api@internal
+      middlewares:
+        - "dashboard-auth@file"

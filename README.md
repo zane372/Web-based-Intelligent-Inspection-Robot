@@ -16,6 +16,7 @@
 - 严格 RESTful API 契约、统一错误结构、命令序列号 `sequence` 单调递增。
 - C++ 单元测试、TypeScript 前端测试、Python 黑盒集成测试三层质量保障。
 - 多阶段 Docker 镜像 + Docker Compose 一键启动 + GitHub Actions 基础 CI + CD 工作流（GHCR digest、Staging、生产审批与回滚）。
+- Traefik 反向代理：对外统一入口（basicAuth 鉴权 + 请求体 4096 字节上限）+ 管理面板（仅本机回环、独立鉴权）。
 
 ## 技术栈
 
@@ -26,7 +27,7 @@
 | 构建 | CMake 3.24+、Ninja、GoogleTest + CTest |
 | 前端 | TypeScript 5.x、Vite、原生 Canvas 2D、Vitest、ESLint |
 | 集成测试 | Python 3.12、pytest 8.x、requests 2.32.x |
-| 交付 | Docker Compose v2、GitHub Actions |
+| 交付 | Docker Compose v2、Traefik v3（反向代理）、GitHub Actions |
 
 ## 目录结构
 
@@ -59,6 +60,9 @@
 ├── .github/workflows/ci.yml
 ├── .github/workflows/cd.yml
 ├── deploy/compose.yaml      # 按镜像摘要部署的 Compose 配置（APP_IMAGE=image@digest）
+├── traefik/
+│   ├── traefik.yml          # Traefik 静态配置（入口、Provider、API/Dashboard）
+│   └── dynamic.yml          # Traefik 动态配置（中间件 + 管理面板路由）
 ├── Dockerfile
 ├── docker-compose.yml
 ├── README.md               # 项目说明（本文件）
@@ -104,13 +108,26 @@ docker compose down
 
 浏览器打开 <http://127.0.0.1:8080>，完成一次移动、一次边界/障碍尝试、一次自动巡检和一次重置。
 
+### 经 Traefik 对外访问（推荐用于演示／公网）
+
+Traefik 作为对外反向代理，提供 basicAuth 鉴权与请求体大小限制：
+
+```bash
+# 对外入口（带 basicAuth，默认账号 test / test，见 traefik/dynamic.yml）
+浏览器打开 http://localhost/    # 或 http://<宿主机 IP>/
+# 管理面板（仅本机回环 8082，独立鉴权 test / test）
+浏览器打开 http://127.0.0.1:8082/dashboard/
+```
+
+> 详见 [docs/traefik.md](docs/traefik.md)。默认账号 `test / test` 仅供演示，部署前务必更换。
+
 > 若宿主机 `8080` 端口被占用，可改用其他端口：
 > - Linux／macOS：`HOST_PORT=8081 docker compose up --build -d`
 > - Windows PowerShell：先 `$env:HOST_PORT = "8081"`，再 `docker compose up --build -d`
 >
 > 验收地址同步改为 `http://127.0.0.1:8081`。
 
-> **安全边界（对外暴露前必读）**：本系统当前无用户鉴权、无应用层 TLS，默认仅监听 `127.0.0.1`（`docker-compose.yml` 端口映射也绑定宿主机回环）。如需对外提供服务，必须显式设 `APP_HOST=0.0.0.0` 并置于带鉴权的反向代理之后，由反代终结 TLS（HTTPS）并限制请求体大小（如 nginx `client_max_body_size 1k`）——应用层的 4096 字节上限是命令语义校验；构建时已对 Crow 打补丁，在解析层就把请求体缓冲封顶在 4096 字节、超出部分不再读入内存并返回 413，反向代理层限制仍是公网部署的必需项。
+> **安全边界（对外暴露前必读）**：应用层仍无用户鉴权、无应用层 TLS；`docker-compose.yml` 已内置 Traefik 反向代理作为对外入口，提供 basicAuth 鉴权与请求体 4096 字节上限（防御纵深，超限在反代层即返回 413）。本地直连 `127.0.0.1:8080` 无鉴权、仅绑定本机回环，仅供开发／测试。如需公网 HTTPS，需为 Traefik 配置 TLS 证书（如 ACME），详见 [docs/traefik.md](docs/traefik.md)。
 
 ### 本地开发路径（辅助）
 
@@ -183,7 +200,7 @@ pytest tests/integration -q --base-url http://127.0.0.1:8080
 | --- | --- | --- |
 | 算法 | `backend/src/domain/`、`backend/tests/` 仿真单元测试 | 离散移动、边界/障碍规则、四方向增量、重置、Boustrophedon 单元分解 + 贪心 BFS 组合策略巡检规划 |
 | 全栈 | `frontend/`、页面集成、根 README 与展示材料 | Canvas 绘制（含障碍物/异常图层）、API Client、UI 状态机、巡检按钮、感知面板、联调 |
-| 运维 | `Dockerfile`、`docker-compose.yml`、`.dockerignore`、`.github/workflows/{ci,cd}.yml` | 多阶段构建、非 root、CI 三 job、CD（GHCR digest、Staging、生产审批/回滚） |
+| 运维 | `Dockerfile`、`docker-compose.yml`、`traefik/`、`.dockerignore`、`.github/workflows/{ci,cd}.yml` | 多阶段构建、非 root、Traefik 反向代理、CI 三 job、CD（GHCR digest、Staging、生产审批/回滚） |
 | 嵌入式（虚拟设备软件） | `backend/src/api/`、`backend/src/control/`、`backend/src/perception/`、`main.cpp`、配置加载 | API 契约、严格校验、序列号、巡检线程控制（PatrolExecutor）、虚拟感知服务、静态托管 |
 | 人工智能（质量保障） | `tests/integration/`、验收矩阵、测试报告 | pytest 黑盒测试、健康等待、错误路径覆盖、感知契约 |
 
@@ -192,6 +209,7 @@ pytest tests/integration -q --base-url http://127.0.0.1:8080
 - **端口被占用**：按上文 `HOST_PORT` 方式换端口。
 - **构建失败**：`docker compose build` 重新构建；C++ 第三方依赖（Crow/json/GoogleTest）在构建阶段从 GitHub 拉取，需网络可达。
 - **健康检查失败**：`docker compose ps` 查看容器状态，`docker compose logs --no-color app` 定位；确认 `config/map.json` 合法。
+- **Traefik 无响应**：`docker compose ps` 确认 `traefik` 容器运行；`docker compose logs --no-color traefik` 检查配置解析错误；确认宿主机 `80` 端口未被占用。
 
 ## 结业提交材料
 

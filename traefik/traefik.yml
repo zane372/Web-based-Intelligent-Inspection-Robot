@@ -1,0 +1,35 @@
+# Traefik v3 静态配置（入口、Provider、API/Dashboard、日志）。
+# 官方参考：https://doc.traefik.io/traefik/reference/static-configuration/file/
+#
+# 说明：
+# - 静态配置改动后需重启 Traefik 才生效（与动态配置不同，不热加载）。
+# - 对外 HTTP 入口为 web（:80），管理面板入口为 dashboard（:8082，仅宿主机回环）。
+# - 同时启用 Docker Provider（自动发现容器 label）与 File Provider（读取 dynamic.yml）。
+
+# ---- API 与 Dashboard（secure 模式：不直接暴露，由 dynamic.yml 的路由 + 鉴权暴露）----
+api:
+  dashboard: true
+
+# ---- 日志与访问日志 ----
+log:
+  level: INFO
+
+accessLog: {}
+
+# ---- 入口点 ----
+entryPoints:
+  web:
+    address: ":80"
+  dashboard:
+    address: ":8082"
+
+# ---- Provider ----
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false   # 只有 traefik.enable=true 的容器才会被自动发现
+    watch: true
+    network: "traefik-net"    # 指定通过哪个 Docker 网络访问被发现的容器
+  file:
+    filename: "/etc/traefik/dynamic.yml"
+    watch: true

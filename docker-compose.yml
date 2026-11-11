@@ -1,12 +1,35 @@
 services:
+  # ---- Traefik 反向代理：对外 HTTP 入口 + 管理面板 ----
+  # 对外访问统一经 Traefik（basicAuth 鉴权 + 请求体大小限制），
+  # 管理面板仅绑定宿主机回环（127.0.0.1:8082）并单独鉴权。
+  traefik:
+    image: traefik:v3.5
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      # 对外 HTTP 入口（带 basicAuth + 请求体限制，见 dynamic.yml 中间件）
+      - "80:80"
+      # 管理面板：仅宿主机回环，避免暴露到局域网/公网
+      - "127.0.0.1:8082:8082"
+    volumes:
+      # 只读挂载 Docker socket，用于自动发现容器 label；
+      # 生产环境建议改用 docker-socket-proxy 收紧权限（见 docs/traefik.md）。
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      - traefik-net
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
     image: patrol-sim-base:local
     ports:
-      # 端口仅绑定宿主机回环；对外暴露需改用 0.0.0.0 并置于带鉴权、
-      # 且限制请求体大小（如 nginx client_max_body_size 1k）的反向代理之后。
+      # 仅宿主机回环直连（无鉴权），供本地开发/测试/CI 使用；
+      # 对外访问请走 Traefik 的 80 端口（带鉴权）。
       - "127.0.0.1:${HOST_PORT:-8080}:8080"
     environment:
       APP_HOST: 0.0.0.0
@@ -35,3 +58,16 @@ services:
       timeout: 3s
       retries: 12
       start_period: 30s
+    # Traefik 路由与负载均衡（Docker Provider 自动发现；中间件定义在 dynamic.yml）
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.entrypoints=web"
+      - "traefik.http.routers.app.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.app.middlewares=app-auth@file,body-limit@file"
+      - "traefik.http.services.app.loadbalancer.server.port=8080"
+    networks:
+      - traefik-net
+
+networks:
+  traefik-net:
+    driver: bridge
