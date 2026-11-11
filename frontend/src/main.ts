@@ -195,7 +195,10 @@ function hitTypeText(hitType: HitType): string {
   }
 }
 
-function rangeText(r: RangeReading): string {
+function rangeText(r: RangeReading | undefined): string {
+  if (!r) {
+    return "—";
+  }
   if (r.hitType === "NONE" || r.distanceCells === null) {
     return hitTypeText(r.hitType);
   }
@@ -272,9 +275,9 @@ function renderPerception(): void {
     perceptionSequenceEl!.textContent = "—";
   } else {
     const byRel = new Map(obs.ranges.map((r) => [r.relativeDirection, r]));
-    rangeFrontEl!.textContent = rangeText(byRel.get("FRONT")!);
-    rangeLeftEl!.textContent = rangeText(byRel.get("LEFT")!);
-    rangeRightEl!.textContent = rangeText(byRel.get("RIGHT")!);
+    rangeFrontEl!.textContent = rangeText(byRel.get("FRONT"));
+    rangeLeftEl!.textContent = rangeText(byRel.get("LEFT"));
+    rangeRightEl!.textContent = rangeText(byRel.get("RIGHT"));
     perceptionSequenceEl!.textContent = String(obs.sequence);
   }
 
@@ -436,10 +439,11 @@ function syncPolling(): void {
 }
 
 function syncPerceptionPolling(): void {
+  // 感知面板是只读展示且无独立「重新连接」按钮，DISCONNECTED 也继续轮询
+  // 以自动恢复（下一次 pollOk 即回 READY）；仅 DISABLED 与 LOADING 停轮询。
   const shouldPoll =
     !document.hidden &&
     perceptionState.ui !== "DISABLED" &&
-    perceptionState.ui !== "DISCONNECTED" &&
     perceptionState.ui !== "LOADING";
   if (shouldPoll && perceptionPollTimer === undefined) {
     perceptionPollTimer = window.setInterval(
@@ -475,7 +479,7 @@ async function onCommand(type: CommandType, direction?: Heading): Promise<void> 
   } catch {
     try {
       const robot = await fetchRobot();
-      dispatch({ type: "pollOk", robot });
+      dispatch({ type: "commandFailed", robot });
     } catch {
       dispatch({ type: "pollFail" });
     }
@@ -497,11 +501,35 @@ document.addEventListener("visibilitychange", () => {
     syncPolling();
     syncPerceptionPolling();
   } else {
-    void pollOnce();
-    void pollPerceptionOnce();
+    // 仅在各自可轮询的状态立即补拉一次，避免 LOADING（地图/状态尚未加载）
+    // 或 DISCONNECTED/DISABLED 期间被无条件轮询干扰（如 pollOk 提前置 READY）。
+    if (state.ui !== "LOADING" && state.ui !== "DISCONNECTED") {
+      void pollOnce();
+    }
+    if (perceptionState.ui !== "LOADING" && perceptionState.ui !== "DISABLED") {
+      void pollPerceptionOnce();
+    }
     syncPolling();
     syncPerceptionPolling();
   }
 });
+
+// 跨 DPI 显示器拖动时 devicePixelRatio 会变化；画布 backing store 只在初始化
+// 采样一次会导致发虚。监听分辨率变化，变化时重置 ctx 触发重采样（L-15）。
+{
+  let dprMedia = window.matchMedia(
+    `(resolution: ${window.devicePixelRatio}dppx)`,
+  );
+  const onDprChange = (): void => {
+    if (ctx !== null) {
+      ctx = null;
+      render();
+    }
+    dprMedia.removeEventListener("change", onDprChange);
+    dprMedia = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    dprMedia.addEventListener("change", onDprChange);
+  };
+  dprMedia.addEventListener("change", onDprChange);
+}
 
 void loadAll();

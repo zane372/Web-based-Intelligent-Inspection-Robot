@@ -110,6 +110,8 @@ docker compose down
 >
 > 验收地址同步改为 `http://127.0.0.1:8081`。
 
+> **安全边界（对外暴露前必读）**：本系统当前无用户鉴权、无应用层 TLS，默认仅监听 `127.0.0.1`（`docker-compose.yml` 端口映射也绑定宿主机回环）。如需对外提供服务，必须显式设 `APP_HOST=0.0.0.0` 并置于带鉴权的反向代理之后，由反代终结 TLS（HTTPS）并限制请求体大小（如 nginx `client_max_body_size 1k`）——应用层的 4096 字节上限是命令语义校验，Crow 在进入处理前已把整个请求体读入内存，无法阻止超大 `Content-Length` 耗尽内存。
+
 ### 本地开发路径（辅助）
 
 **C++ 后端**（需要 CMake、GCC 12+、libboost-system-dev、libasio-dev）：
@@ -118,7 +120,7 @@ docker compose down
 cmake -S backend -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
-# 启动后端（默认监听 0.0.0.0:8080）
+# 启动后端（默认监听 127.0.0.1:8080）
 ./build/patrol_server
 ```
 

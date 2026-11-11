@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <string>
 
@@ -35,6 +36,29 @@ std::string envOr(const char* name, const std::string& fallback) {
     return (value != nullptr && value[0] != '\0') ? std::string(value) : fallback;
 }
 
+// 解析端口号：仅接受 1..65535 的纯十进制数字，非法返回 false。
+// 逐位累加并在每次累加后立即检查上界，避免 atoi 的静默截断与溢出。
+bool parsePort(const std::string& text, int& out) {
+    if (text.empty()) {
+        return false;
+    }
+    int value = 0;
+    for (char c : text) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        value = value * 10 + (c - '0');
+        if (value > 65535) {
+            return false;
+        }
+    }
+    if (value < 1) {
+        return false;
+    }
+    out = value;
+    return true;
+}
+
 }  // namespace
 }  // namespace patrol
 
@@ -43,8 +67,12 @@ int main() {
 
     const std::string mapPath = envOr("MAP_CONFIG", "config/map.json");
     const std::string staticRoot = envOr("STATIC_ROOT", "web");
-    const std::string host = envOr("APP_HOST", "0.0.0.0");
-    const int port = std::atoi(envOr("APP_PORT", "8080").c_str());
+    const std::string host = envOr("APP_HOST", "127.0.0.1");
+    int port = 0;
+    if (!parsePort(envOr("APP_PORT", "8080"), port)) {
+        std::cerr << "[patrol_server] APP_PORT 非法: 需为 1..65535 的十进制整数\n";
+        return 1;
+    }
 
     // 配置加载失败按规格以非零码退出，并输出具体字段。
     MapConfig config;
@@ -70,22 +98,27 @@ int main() {
             return 1;
         }
     }
-    PerceptionService perception(perceptionConfig, controller.snapshot().instanceId,
-                                 grid);
+    // 用 shared_ptr 持有感知服务：controller 的 observer lambda 在巡检线程中
+    // 于控制器锁外被调用；controller 声明早于 perception，析构时 perception
+    // 先亡，若 lambda 按引用捕获 &perception，则 controller 析构 join 巡检线程
+    // 期间线程再调 observer 会访问已析构对象（UAF）。按值捕获 shared_ptr 使
+    // 感知服务存活至最后一个 observer 调用结束。
+    auto perception = std::make_shared<PerceptionService>(
+        perceptionConfig, controller.snapshot().instanceId, grid);
 
     // 接线：每次命令执行 / 巡检步推进后，以已确认快照通知感知服务
     // （观察在控制器锁外完成，不嵌套感知锁，AR-CON-006/007）。
     controller.setObserver(
-        [&perception](const RobotSnapshot& snap) {
-            perception.observe(snap.instanceId, snap.sequence, snap.position,
-                               snap.heading, snap.lastResult);
+        [perception](const RobotSnapshot& snap) {
+            perception->observe(snap.instanceId, snap.sequence, snap.position,
+                                snap.heading, snap.lastResult);
         });
 
     // 初态观察（sequence=0，SPEC 6.5）。
     {
         const RobotSnapshot initial = controller.snapshot();
-        perception.observe(initial.instanceId, initial.sequence,
-                           initial.position, initial.heading, initial.lastResult);
+        perception->observe(initial.instanceId, initial.sequence,
+                            initial.position, initial.heading, initial.lastResult);
     }
 
     std::cout << "[patrol_server] mapId=" << config.mapId
@@ -97,6 +130,6 @@ int main() {
               << " perception=" << (perceptionConfig.enabled ? "enabled" : "disabled")
               << '\n';
 
-    runHttpServer(config, controller, perception, staticRoot, host, port);
+    runHttpServer(config, controller, *perception, staticRoot, host, port);
     return 0;
 }

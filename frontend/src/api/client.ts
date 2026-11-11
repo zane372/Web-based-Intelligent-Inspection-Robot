@@ -66,6 +66,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         err?.requestId,
       );
     }
+    // 成功响应必须是 JSON 对象（而非 null/数组/原始值），否则视为后端异常，
+    // 避免把畸形响应静默 cast 成 T 后在渲染层崩溃。
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      throw new ApiError(
+        "INVALID_RESPONSE",
+        `HTTP ${response.status} 响应体不是 JSON 对象`,
+      );
+    }
     return body as T;
   } finally {
     clearTimeout(timer);

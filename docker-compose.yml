@@ -5,7 +5,9 @@ services:
       dockerfile: Dockerfile
     image: patrol-sim-base:local
     ports:
-      - "${HOST_PORT:-8080}:8080"
+      # 端口仅绑定宿主机回环；对外暴露需改用 0.0.0.0 并置于带鉴权、
+      # 且限制请求体大小（如 nginx client_max_body_size 1k）的反向代理之后。
+      - "127.0.0.1:${HOST_PORT:-8080}:8080"
     environment:
       APP_HOST: 0.0.0.0
       APP_PORT: "8080"
@@ -16,6 +18,9 @@ services:
     init: true
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/v1/health"]
       interval: 5s

@@ -70,9 +70,10 @@ jobs:
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ steps.verify.outputs.sha }}
+          persist-credentials: false
 
       - name: 登录 GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -80,18 +81,22 @@ jobs:
       - name: 构建镜像
         run: docker build -t "$IMAGE:sha-${{ steps.verify.outputs.sha }}" .
 
-      - name: 推送前冒烟（生产等价入口：健康 + 首页，SPEC 9.5）
+      - name: 推送前冒烟（用刚构建的镜像，生产等价入口：健康 + 首页，SPEC 9.5）
         run: |
           set -euo pipefail
-          docker compose up --build -d
+          # 用「构建镜像」步骤刚产出的 $IMAGE:sha-$sha 标签镜像冒烟，而非 docker compose
+          # up --build 从源码重建（那样测的是 patrol-sim-base:local，不是将要推送的镜像）。
+          # digest 需 push 之后才可取得，故冒烟用不可变 sha 标签；生产部署改用 digest。
+          export APP_IMAGE="$IMAGE:sha-${{ steps.verify.outputs.sha }}"
+          docker compose -f deploy/compose.yaml up -d
           ok=0
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/api/v1/health > /dev/null; then ok=1; break; fi
             sleep 2
           done
-          if [ "$ok" != "1" ]; then echo "container did not become healthy"; docker compose down; exit 1; fi
+          if [ "$ok" != "1" ]; then echo "container did not become healthy"; docker compose -f deploy/compose.yaml down; exit 1; fi
           curl -fsS http://127.0.0.1:8080/ > /dev/null
-          docker compose down
+          docker compose -f deploy/compose.yaml down
 
       - name: 推送并记录 digest
         id: push
@@ -148,10 +153,23 @@ jobs:
       # 生产串行部署，禁止两个版本同时操作同一容器（SPEC 9.4）。
       cancel-in-progress: false
     steps:
+      - name: 校验 promote digest 格式
+        env:
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$IMAGE_DIGEST" | grep -Ezq '^[a-z0-9]+([._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$'; then
+            echo "image_digest 格式非法（需 ghcr.io/<owner>/<repo>@sha256:<64位hex>）: $IMAGE_DIGEST"
+            exit 1
+          fi
+          echo "promote digest: $IMAGE_DIGEST"
+
       - name: 记录回滚点（当前可用 digest）
+        env:
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
         run: |
           # 部署前记录上一健康 digest 作为回滚目标（SPEC 9.6.2）。
-          echo "new_digest=${{ github.event.inputs.image_digest }}"
+          echo "new_digest=$IMAGE_DIGEST"
           echo "rollback_target=由部署记录取当前 production 已部署 digest"
 
       - name: 部署 Production（按 digest）
@@ -159,10 +177,11 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
         run: |
           # 部署命令形态：APP_IMAGE="<digest>" docker compose -f deploy/compose.yaml up -d
           echo "部署目标未配置——跳过真实 SSH 部署（流程骨架，未验证）"
-          echo "would deploy digest: ${{ github.event.inputs.image_digest }} (via deploy/compose.yaml)"
+          echo "would deploy digest: $IMAGE_DIGEST (via deploy/compose.yaml)"
 
       - name: Production 只读冒烟（不跑 RESET/MOVE/START PATROL 等有副作用测试，SPEC 9.6.4）
         env:
@@ -172,11 +191,14 @@ jobs:
           echo "would check (readonly): $base/api/v1/health, /api/v1/map, /api/v1/robot, / 首页, 静态资源"
 
       - name: 记录发布运行
+        env:
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
+          REASON: ${{ github.event.inputs.reason }}
         run: |
-          echo "image_digest=${{ github.event.inputs.image_digest }}"
+          echo "image_digest=$IMAGE_DIGEST"
           echo "environment=production"
           echo "operator=${{ github.actor }}"
-          echo "reason=${{ github.event.inputs.reason }}"
+          echo "reason=$REASON"
 
   rollback:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'rollback'
@@ -186,21 +208,28 @@ jobs:
       group: cd-production
       cancel-in-progress: false
     steps:
-      - name: 校验回滚 digest
+      - name: 校验回滚 digest 格式
+        env:
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
         run: |
-          d="${{ github.event.inputs.image_digest }}"
-          if [ -z "$d" ]; then echo "回滚必须提供 image_digest"; exit 1; fi
-          echo "rollback digest: $d"
+          set -euo pipefail
+          if [ -z "$IMAGE_DIGEST" ]; then echo "回滚必须提供 image_digest"; exit 1; fi
+          if ! printf '%s' "$IMAGE_DIGEST" | grep -Ezq '^[a-z0-9]+([._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$'; then
+            echo "image_digest 格式非法（需 ghcr.io/<owner>/<repo>@sha256:<64位hex>）: $IMAGE_DIGEST"
+            exit 1
+          fi
+          echo "rollback digest: $IMAGE_DIGEST"
 
       - name: 部署回滚（按旧 digest，SPEC 9.6）
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
         run: |
           # 回滚命令形态：APP_IMAGE="<旧 digest>" docker compose -f deploy/compose.yaml up -d
           echo "部署目标未配置——跳过真实 SSH 回滚（流程骨架，未验证）"
-          echo "would rollback to: ${{ github.event.inputs.image_digest }} (via deploy/compose.yaml)"
+          echo "would rollback to: $IMAGE_DIGEST (via deploy/compose.yaml)"
 
       - name: 回滚后只读冒烟
         env:
@@ -209,8 +238,11 @@ jobs:
           echo "would check (readonly): ${PRODUCTION_BASE_URL:-http://127.0.0.1:8080}/api/v1/health"
 
       - name: 记录回滚运行
+        env:
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
+          REASON: ${{ github.event.inputs.reason }}
         run: |
-          echo "image_digest=${{ github.event.inputs.image_digest }}"
+          echo "image_digest=$IMAGE_DIGEST"
           echo "environment=production"
           echo "operator=${{ github.actor }}"
-          echo "reason=${{ github.event.inputs.reason }}"
+          echo "reason=$REASON"

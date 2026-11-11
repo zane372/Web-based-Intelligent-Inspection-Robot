@@ -31,6 +31,7 @@ export type AppEvent =
   | { type: "disconnect" }
   | { type: "commandStart" }
   | { type: "commandDone"; robot: RobotState; result: CommandResult }
+  | { type: "commandFailed"; robot: RobotState }
   | { type: "feedbackTimeout" }
   | { type: "patrolAlertTimeout" };
 
@@ -98,8 +99,12 @@ export function reduce(state: AppState, event: AppEvent): AppState {
       if (prev && event.robot.sequence < prev.sequence) {
         return state;
       }
-      // 命令执行中收到轮询：只更新数据，保持 EXECUTING 以免按钮提前放开。
-      const ui: UiState = state.ui === "EXECUTING" ? "EXECUTING" : "READY";
+      // 命令执行中或边界/障碍反馈展示期间收到轮询：只更新数据，保持当前
+      // UI 态以免按钮提前放开或反馈文案被 1s 轮询秒覆盖（反馈由 1.5s 定时器收尾）。
+      const ui: UiState =
+        state.ui === "EXECUTING" || state.ui === "BOUNDARY_FEEDBACK"
+          ? state.ui
+          : "READY";
       return {
         ...state,
         ui,
@@ -141,6 +146,29 @@ export function reduce(state: AppState, event: AppEvent): AppState {
       return {
         ...state,
         ui,
+        robot: event.robot,
+        pollFailures: 0,
+        patrolAlert: patrolAlertFor(event.robot, state.patrolAlert),
+      };
+    }
+
+    case "commandFailed": {
+      const prev = state.robot;
+      // 服务重启：instanceId 变化，进入 LOADING 并触发重载（与 pollOk 一致）。
+      if (prev && event.robot.instanceId !== prev.instanceId) {
+        return {
+          ...state,
+          ui: "LOADING",
+          robot: null,
+          instanceChanged: true,
+          patrolAlert: null,
+        };
+      }
+      // 命令发送失败但服务仍可达（fetchRobot 成功）：回到 READY 并刷新快照，
+      // 避免命令失败后 pollOk 把 UI 永久锁死在 EXECUTING。
+      return {
+        ...state,
+        ui: "READY",
         robot: event.robot,
         pollFailures: 0,
         patrolAlert: patrolAlertFor(event.robot, state.patrolAlert),

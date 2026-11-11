@@ -125,7 +125,10 @@ PerceptionEventsView PerceptionService::events(int after, int limit) const {
     view.oldestEventId = events_.empty() ? 0 : events_.front().eventId;
     // 调用方游标 after 之后到最旧保留事件之间存在被环形缓冲丢弃的事件
     // 时标记 truncated（SPEC 6.7.2：客户端须重取 latest 再从新基线续拉）。
-    view.truncated = !events_.empty() && after + 1 < events_.front().eventId;
+    // 用 `after < front.eventId - 1` 而非 `after + 1 < front.eventId`：
+    // eventId 从 1 起，`front.eventId - 1` 不会下溢；而 after==INT_MAX 时
+    // `after + 1` 会触发有符号整数溢出（未定义行为）。
+    view.truncated = !events_.empty() && after < events_.front().eventId - 1;
 
     int returned = 0;
     for (const PerceptionEvent& e : events_) {

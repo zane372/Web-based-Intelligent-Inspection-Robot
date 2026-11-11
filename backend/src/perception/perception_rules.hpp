@@ -109,7 +109,7 @@ inline std::vector<Detection> detectHazards(
 }
 
 // 为每个异常源从可通行格中抽取互不重复的随机位置（RESET 后随机化真值）。
-// 确定性 Fisher-Yates 洗牌（rng() % i），可注入固定种子以便测试；
+// 确定性 Fisher-Yates 洗牌（uniform_int_distribution，无模偏置），可注入固定种子以便测试；
 // 结果保证界内可通行、互不重复。可通行格数少于 hazards.size()（含空网格）
 // 时无法满足互不重复，返回空向量，由调用方保持原位。
 inline std::vector<Position> sampleHazardPositions(
@@ -129,7 +129,8 @@ inline std::vector<Position> sampleHazardPositions(
         return {};  // 可通行格不足，无法保证互不重复。
     }
     for (std::size_t i = walkable.size(); i > 1; --i) {
-        const std::size_t j = static_cast<std::size_t>(rng()) % i;
+        const std::size_t j =
+            std::uniform_int_distribution<std::size_t>(0, i - 1)(rng);
         std::swap(walkable[i - 1], walkable[j]);
     }
     std::vector<Position> out;

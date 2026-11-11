@@ -108,6 +108,7 @@ add_executable(domain_tests
   tests/command_parser_tests.cpp
   tests/patrol_planner_tests.cpp
   tests/config_tests.cpp
+  tests/path_safety_tests.cpp
 )
 target_link_libraries(domain_tests PRIVATE patrol_api GTest::gtest_main)
 add_test(NAME domain_tests COMMAND domain_tests)

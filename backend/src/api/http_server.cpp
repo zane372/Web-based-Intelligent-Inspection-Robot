@@ -11,11 +11,13 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "crow.h"
 
 #include "api/command_parser.hpp"
+#include "api/path_safety.hpp"
 #include "dto.hpp"
 
 // Crow 的默认路由只匹配 GET（routing.h 中 methods_ 初始化为 1<<Get）。
@@ -40,6 +42,9 @@ namespace patrol {
 namespace {
 
 constexpr std::size_t kMaxBodyBytes = 4096;
+// 静态文件单文件大小上限（8 MiB）：防止异常大的静态资源被整文件读入内存
+// 造成内存放大；正常前端产物（HTML/CSS/JS/字体/图片）远小于此值。
+constexpr std::streamsize kMaxStaticFileBytes = 8 * 1024 * 1024;
 
 // 生成进程内唯一、不透明请求 ID（用于统一错误响应与日志关联）。
 std::string makeRequestId() {
@@ -221,45 +226,32 @@ std::string mimeTypeFor(const std::string& path) {
     return "application/octet-stream";
 }
 
-// 校验 URL 相对路径安全（禁止 .. 与绝对路径），并拼接文件系统路径。
-bool safeJoin(const std::string& root, const std::string& urlPath,
-              std::string& out) {
-    if (urlPath.empty() || urlPath[0] == '/') {
-        return false;
-    }
-    out = root;
-    std::size_t start = 0;
-    while (start <= urlPath.size()) {
-        const std::size_t slash = urlPath.find('/', start);
-        const std::string segment =
-            urlPath.substr(start, slash == std::string::npos ? std::string::npos
-                                                             : slash - start);
-        if (segment.empty() || segment == "." || segment == "..") {
-            return false;
-        }
-        out += '/';
-        out += segment;
-        if (slash == std::string::npos) {
-            break;
-        }
-        start = slash + 1;
-    }
-    return true;
-}
-
-// 静态文件服务：命中返回文件内容，未命中返回 false。
+// 静态文件服务：命中返回文件内容，未命中返回 404。GET/HEAD 都读文件（封顶
+// kMaxStaticFileBytes）；HEAD 的响应体由 Crow 依据 skip_body 自动剥除，
+// Content-Length 仍按资源真实大小设置，故这里对 GET/HEAD 返回同一 body。
 crow::response serveStatic(const std::string& root, const std::string& urlPath) {
     std::string fullPath;
-    if (!safeJoin(root, urlPath, fullPath)) {
+    if (!path_safety::safeJoin(root, urlPath, fullPath)) {
         return crow::response(404, "not found");
     }
-    std::ifstream in(fullPath, std::ios::binary);
+    std::ifstream in(fullPath, std::ios::binary | std::ios::ate);
     if (!in.is_open()) {
         return crow::response(404, "not found");
     }
-    std::ostringstream buffer;
-    buffer << in.rdbuf();
-    crow::response res(200, buffer.str());
+    // 先取文件大小，超过上限则拒绝，避免整文件读入内存。
+    const std::streamoff size = in.tellg();
+    if (size < 0 || size > kMaxStaticFileBytes) {
+        return crow::response(413, "static file too large");
+    }
+    in.seekg(0, std::ios::beg);
+    std::string body(static_cast<std::size_t>(size), '\0');
+    if (size > 0) {
+        in.read(body.data(), size);
+        if (in.gcount() != size) {
+            return crow::response(404, "not found");
+        }
+    }
+    crow::response res(200, std::move(body));
     res.set_header("Content-Type", mimeTypeFor(fullPath));
     return res;
 }
@@ -440,14 +432,15 @@ void runHttpServer(const MapConfig& config,
             res.set_header("Allow", "GET, HEAD");
             return res;
         }
-        const bool head = (req.method == crow::HTTPMethod::HEAD);
         std::ifstream in(staticRoot + "/index.html", std::ios::binary);
         if (!in.is_open()) {
             return crow::response(404, "not found");
         }
         std::ostringstream buffer;
         buffer << in.rdbuf();
-        crow::response res(200, head ? std::string{} : buffer.str());
+        // GET/HEAD 均返回完整 body，HEAD 的响应体由 Crow 依据 skip_body 剥除，
+        // 使 Content-Length 保持为 index.html 的真实大小（而非 0）。
+        crow::response res(200, buffer.str());
         res.set_header("Content-Type", "text/html; charset=utf-8");
         return res;
     });

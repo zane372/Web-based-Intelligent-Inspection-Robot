@@ -118,6 +118,28 @@ describe("API client", () => {
     expect(error).toMatchObject({ code: "MISSING_FIELD" });
   });
 
+  it("200 但响应体为 null 时抛出 INVALID_RESPONSE", async () => {
+    const mock = vi.fn().mockResolvedValue(
+      new Response("null", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    const error = await fetchRobot().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+
+  it("200 但响应体为 JSON 数组时抛出 INVALID_RESPONSE", async () => {
+    const mock = vi.fn().mockResolvedValue(
+      new Response("[]", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    const error = await fetchRobot().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+
   it("fetchPerceptionLatest 请求正确路径", async () => {
     const mock = vi.fn().mockResolvedValue(
       new Response(
