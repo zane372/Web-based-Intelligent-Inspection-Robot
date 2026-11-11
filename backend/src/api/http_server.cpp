@@ -16,6 +16,7 @@
 #include "crow.h"
 
 #include "api/command_parser.hpp"
+#include "api/path_safety.hpp"
 #include "dto.hpp"
 
 // Crow 的默认路由只匹配 GET（routing.h 中 methods_ 初始化为 1<<Get）。
@@ -221,36 +222,10 @@ std::string mimeTypeFor(const std::string& path) {
     return "application/octet-stream";
 }
 
-// 校验 URL 相对路径安全（禁止 .. 与绝对路径），并拼接文件系统路径。
-bool safeJoin(const std::string& root, const std::string& urlPath,
-              std::string& out) {
-    if (urlPath.empty() || urlPath[0] == '/') {
-        return false;
-    }
-    out = root;
-    std::size_t start = 0;
-    while (start <= urlPath.size()) {
-        const std::size_t slash = urlPath.find('/', start);
-        const std::string segment =
-            urlPath.substr(start, slash == std::string::npos ? std::string::npos
-                                                             : slash - start);
-        if (segment.empty() || segment == "." || segment == "..") {
-            return false;
-        }
-        out += '/';
-        out += segment;
-        if (slash == std::string::npos) {
-            break;
-        }
-        start = slash + 1;
-    }
-    return true;
-}
-
 // 静态文件服务：命中返回文件内容，未命中返回 false。
 crow::response serveStatic(const std::string& root, const std::string& urlPath) {
     std::string fullPath;
-    if (!safeJoin(root, urlPath, fullPath)) {
+    if (!path_safety::safeJoin(root, urlPath, fullPath)) {
         return crow::response(404, "not found");
     }
     std::ifstream in(fullPath, std::ios::binary);
