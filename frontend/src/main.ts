@@ -439,10 +439,11 @@ function syncPolling(): void {
 }
 
 function syncPerceptionPolling(): void {
+  // 感知面板是只读展示且无独立「重新连接」按钮，DISCONNECTED 也继续轮询
+  // 以自动恢复（下一次 pollOk 即回 READY）；仅 DISABLED 与 LOADING 停轮询。
   const shouldPoll =
     !document.hidden &&
     perceptionState.ui !== "DISABLED" &&
-    perceptionState.ui !== "DISCONNECTED" &&
     perceptionState.ui !== "LOADING";
   if (shouldPoll && perceptionPollTimer === undefined) {
     perceptionPollTimer = window.setInterval(
