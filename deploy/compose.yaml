@@ -22,9 +22,17 @@ services:
     init: true
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     read_only: true
     tmpfs:
       - /tmp
+    # 容器级内存兜底（防御纵深）：请求体缓冲已在解析层封顶 4096，此处再限制
+    # 进程失控内存耗尽的影响面（OOM 只杀掉本容器，不影响宿主机）。
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/v1/health"]
       interval: 5s
