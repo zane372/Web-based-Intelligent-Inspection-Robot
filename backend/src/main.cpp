@@ -35,6 +35,29 @@ std::string envOr(const char* name, const std::string& fallback) {
     return (value != nullptr && value[0] != '\0') ? std::string(value) : fallback;
 }
 
+// 解析端口号：仅接受 1..65535 的纯十进制数字，非法返回 false。
+// 逐位累加并在每次累加后立即检查上界，避免 atoi 的静默截断与溢出。
+bool parsePort(const std::string& text, int& out) {
+    if (text.empty()) {
+        return false;
+    }
+    int value = 0;
+    for (char c : text) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        value = value * 10 + (c - '0');
+        if (value > 65535) {
+            return false;
+        }
+    }
+    if (value < 1) {
+        return false;
+    }
+    out = value;
+    return true;
+}
+
 }  // namespace
 }  // namespace patrol
 
@@ -44,7 +67,11 @@ int main() {
     const std::string mapPath = envOr("MAP_CONFIG", "config/map.json");
     const std::string staticRoot = envOr("STATIC_ROOT", "web");
     const std::string host = envOr("APP_HOST", "127.0.0.1");
-    const int port = std::atoi(envOr("APP_PORT", "8080").c_str());
+    int port = 0;
+    if (!parsePort(envOr("APP_PORT", "8080"), port)) {
+        std::cerr << "[patrol_server] APP_PORT 非法: 需为 1..65535 的十进制整数\n";
+        return 1;
+    }
 
     // 配置加载失败按规格以非零码退出，并输出具体字段。
     MapConfig config;
