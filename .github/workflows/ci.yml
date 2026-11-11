@@ -29,14 +29,16 @@ jobs:
           persist-credentials: false
 
       - name: Install Boost, Asio and ccache
-        # apt-get 偶发网络抖动（exit 100），加 3 次重试提升稳定性（SPEC 9.3.4）。
+        # apt-get 偶发网络抖动（exit 100 / 长时间挂起），加超时快速失败 + 3 次重试。
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           for i in 1 2 3; do
-            if sudo apt-get update && sudo apt-get install -y --no-install-recommends libboost-system-dev libasio-dev ccache; then
+            if sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update \
+               && sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 install -y --no-install-recommends libboost-system-dev libasio-dev ccache; then
               exit 0
             fi
-            echo "apt-get 失败（第 ${i} 次），10 秒后重试..."
-            sleep 10
+            echo "apt-get 失败（第 ${i} 次），15 秒后重试..."
+            sleep 15
           done
           echo "apt-get 重试 3 次仍失败"
           exit 1
