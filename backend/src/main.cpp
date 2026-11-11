@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <string>
 
@@ -97,22 +98,27 @@ int main() {
             return 1;
         }
     }
-    PerceptionService perception(perceptionConfig, controller.snapshot().instanceId,
-                                 grid);
+    // 用 shared_ptr 持有感知服务：controller 的 observer lambda 在巡检线程中
+    // 于控制器锁外被调用；controller 声明早于 perception，析构时 perception
+    // 先亡，若 lambda 按引用捕获 &perception，则 controller 析构 join 巡检线程
+    // 期间线程再调 observer 会访问已析构对象（UAF）。按值捕获 shared_ptr 使
+    // 感知服务存活至最后一个 observer 调用结束。
+    auto perception = std::make_shared<PerceptionService>(
+        perceptionConfig, controller.snapshot().instanceId, grid);
 
     // 接线：每次命令执行 / 巡检步推进后，以已确认快照通知感知服务
     // （观察在控制器锁外完成，不嵌套感知锁，AR-CON-006/007）。
     controller.setObserver(
-        [&perception](const RobotSnapshot& snap) {
-            perception.observe(snap.instanceId, snap.sequence, snap.position,
-                               snap.heading, snap.lastResult);
+        [perception](const RobotSnapshot& snap) {
+            perception->observe(snap.instanceId, snap.sequence, snap.position,
+                                snap.heading, snap.lastResult);
         });
 
     // 初态观察（sequence=0，SPEC 6.5）。
     {
         const RobotSnapshot initial = controller.snapshot();
-        perception.observe(initial.instanceId, initial.sequence,
-                           initial.position, initial.heading, initial.lastResult);
+        perception->observe(initial.instanceId, initial.sequence,
+                            initial.position, initial.heading, initial.lastResult);
     }
 
     std::cout << "[patrol_server] mapId=" << config.mapId
@@ -124,6 +130,6 @@ int main() {
               << " perception=" << (perceptionConfig.enabled ? "enabled" : "disabled")
               << '\n';
 
-    runHttpServer(config, controller, perception, staticRoot, host, port);
+    runHttpServer(config, controller, *perception, staticRoot, host, port);
     return 0;
 }
