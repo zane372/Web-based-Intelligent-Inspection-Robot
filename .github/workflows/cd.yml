@@ -153,6 +153,17 @@ jobs:
       # 生产串行部署，禁止两个版本同时操作同一容器（SPEC 9.4）。
       cancel-in-progress: false
     steps:
+      - name: 校验 promote digest 格式
+        env:
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$IMAGE_DIGEST" | grep -Eq '^[a-z0-9]+([._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$'; then
+            echo "image_digest 格式非法（需 ghcr.io/<owner>/<repo>@sha256:<64位hex>）: $IMAGE_DIGEST"
+            exit 1
+          fi
+          echo "promote digest: $IMAGE_DIGEST"
+
       - name: 记录回滚点（当前可用 digest）
         run: |
           # 部署前记录上一健康 digest 作为回滚目标（SPEC 9.6.2）。
@@ -191,11 +202,17 @@ jobs:
       group: cd-production
       cancel-in-progress: false
     steps:
-      - name: 校验回滚 digest
+      - name: 校验回滚 digest 格式
+        env:
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
         run: |
-          d="${{ github.event.inputs.image_digest }}"
-          if [ -z "$d" ]; then echo "回滚必须提供 image_digest"; exit 1; fi
-          echo "rollback digest: $d"
+          set -euo pipefail
+          if [ -z "$IMAGE_DIGEST" ]; then echo "回滚必须提供 image_digest"; exit 1; fi
+          if ! printf '%s' "$IMAGE_DIGEST" | grep -Eq '^[a-z0-9]+([._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$'; then
+            echo "image_digest 格式非法（需 ghcr.io/<owner>/<repo>@sha256:<64位hex>）: $IMAGE_DIGEST"
+            exit 1
+          fi
+          echo "rollback digest: $IMAGE_DIGEST"
 
       - name: 部署回滚（按旧 digest，SPEC 9.6）
         env:
