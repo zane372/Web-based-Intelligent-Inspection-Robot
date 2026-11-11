@@ -33,6 +33,10 @@ set(CROW_FEATURES "" CACHE STRING "" FORCE)
 FetchContent_Declare(Crow
   GIT_REPOSITORY https://github.com/CrowCpp/Crow.git
   GIT_TAG v1.2.0
+  # 请求体缓冲上限补丁（防超大 body 在进入 handler 前耗尽内存，见 SPEC 7 防御边界）。
+  # 注意：PATCH_COMMAND 仅在 FetchContent 首次下载时执行；若变更补丁内容，
+  # 需删除 build/_deps/crow-src 让 CMake 重新应用，否则会复用旧的未打补丁源。
+  PATCH_COMMAND git apply "${CMAKE_SOURCE_DIR}/patches/crow-body-limit.patch"
 )
 FetchContent_MakeAvailable(Crow)
 

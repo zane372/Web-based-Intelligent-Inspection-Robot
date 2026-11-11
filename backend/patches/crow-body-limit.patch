@@ -1,0 +1,97 @@
+diff --git a/include/crow/app.h b/include/crow/app.h
+index 0b2d9c3..02d27ac 100644
+--- a/include/crow/app.h
++++ b/include/crow/app.h
+@@ -394,6 +394,22 @@ namespace crow
+             return res_stream_threshold_;
+         }
+ 
++        /// \brief Set the maximum request body size (in bytes) that Crow will buffer per request (Default is 1MiB)
++        ///
++        /// A request body larger than this limit is truncated and flagged via request::body_too_large,
++        /// preventing unbounded memory usage from oversized uploads.
++        self_t& max_body_size(size_t value)
++        {
++            max_body_size_ = value;
++            return *this;
++        }
++
++        /// \brief Get the maximum request body size (in bytes) that Crow will buffer per request
++        size_t& max_body_size()
++        {
++            return max_body_size_;
++        }
++
+         
+         self_t& register_blueprint(Blueprint& blueprint)
+         {
+@@ -736,6 +752,7 @@ namespace crow
+         std::string server_name_ = std::string("Crow/") + VERSION;
+         std::string bindaddr_ = "0.0.0.0";
+         size_t res_stream_threshold_ = 1048576;
++        size_t max_body_size_ = 1048576;
+         Router router_;
+         bool static_routes_added_{false};
+ 
+diff --git a/include/crow/http_connection.h b/include/crow/http_connection.h
+index 64bbf07..4abdcde 100644
+--- a/include/crow/http_connection.h
++++ b/include/crow/http_connection.h
+@@ -69,6 +69,7 @@ namespace crow
+           res_stream_threshold_(handler->stream_threshold()),
+           queue_length_(queue_length)
+         {
++            parser_.set_max_body_size(handler_->max_body_size());
+ #ifdef CROW_ENABLE_DEBUG
+             connectionCount++;
+             CROW_LOG_DEBUG << "Connection (" << this << ") allocated, total: " << connectionCount;
+diff --git a/include/crow/http_request.h b/include/crow/http_request.h
+index 3b71e1b..3233db2 100644
+--- a/include/crow/http_request.h
++++ b/include/crow/http_request.h
+@@ -45,6 +45,7 @@ namespace crow // NOTE: Already documented in "crow/app.h"
+         bool keep_alive,    ///< Whether or not the server should send a `connection: Keep-Alive` header to the client.
+           close_connection, ///< Whether or not the server should shut down the TCP connection once a response is sent.
+           upgrade;          ///< Whether or noth the server should change the HTTP connection to a different connection.
++        bool body_too_large = false; ///< Whether the request body exceeded the configured max body size and was truncated.
+ 
+         void* middleware_context{};
+         void* middleware_container{};
+diff --git a/include/crow/parser.h b/include/crow/parser.h
+index 7099e8c..1530f78 100644
+--- a/include/crow/parser.h
++++ b/include/crow/parser.h
+@@ -88,6 +88,11 @@ namespace crow
+         static int on_body(http_parser* self_, const char* at, size_t length)
+         {
+             HTTPParser* self = static_cast<HTTPParser*>(self_);
++            if (length > self->max_body_size_ || self->req.body.size() > self->max_body_size_ - length)
++            {
++                self->req.body_too_large = true;
++                return 0;
++            }
+             self->req.body.insert(self->req.body.end(), at, at + length);
+             return 0;
+         }
+@@ -136,6 +141,13 @@ namespace crow
+             return feed(nullptr, 0);
+         }
+ 
++        /// Set the maximum request body size (in bytes) that will be buffered.
++        /// Bodies exceeding this limit are truncated and flagged via request::body_too_large.
++        void set_max_body_size(std::size_t value)
++        {
++            max_body_size_ = value;
++        }
++
+         void clear()
+         {
+             req = crow::request();
+@@ -188,6 +200,7 @@ namespace crow
+ 
+     private:
+         int header_building_state = 0;
++        std::size_t max_body_size_ = static_cast<std::size_t>(-1); ///< Max request body bytes to buffer (unlimited by default)
+         bool message_complete = false;
+         std::string header_field;
+         std::string header_value;

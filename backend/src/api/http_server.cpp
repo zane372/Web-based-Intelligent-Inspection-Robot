@@ -289,6 +289,9 @@ void runHttpServer(const MapConfig& config,
                    const std::string& host,
                    int port) {
     crow::SimpleApp app;
+    // 收紧 Crow 的请求体缓冲上限，与下方 POST 的 kMaxBodyBytes 检查一致：
+    // 防止超大 body 在进入 handler 前就被全量读入内存（DoS 纵深防御）。
+    app.max_body_size(kMaxBodyBytes);
 
     // ---- GET /api/v1/health ----
     CROW_ROUTE(app, "/api/v1/health")
@@ -389,8 +392,8 @@ void runHttpServer(const MapConfig& config,
                              "Content-Type 必须是 application/json", requestId);
         }
 
-        // 2) 请求体大小检查。
-        if (req.body.size() > kMaxBodyBytes) {
+        // 2) 请求体大小检查（含 Crow 缓冲层截断标志，见 patches/crow-body-limit.patch）。
+        if (req.body_too_large || req.body.size() > kMaxBodyBytes) {
             return jsonError(413, "PAYLOAD_TOO_LARGE",
                              "请求体超过 4096 字节上限", requestId);
         }
