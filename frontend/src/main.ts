@@ -501,8 +501,14 @@ document.addEventListener("visibilitychange", () => {
     syncPolling();
     syncPerceptionPolling();
   } else {
-    void pollOnce();
-    void pollPerceptionOnce();
+    // 仅在各自可轮询的状态立即补拉一次，避免 LOADING（地图/状态尚未加载）
+    // 或 DISCONNECTED/DISABLED 期间被无条件轮询干扰（如 pollOk 提前置 READY）。
+    if (state.ui !== "LOADING" && state.ui !== "DISCONNECTED") {
+      void pollOnce();
+    }
+    if (perceptionState.ui !== "LOADING" && perceptionState.ui !== "DISABLED") {
+      void pollPerceptionOnce();
+    }
     syncPolling();
     syncPerceptionPolling();
   }
