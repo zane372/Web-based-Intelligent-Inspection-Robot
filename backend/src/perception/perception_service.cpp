@@ -31,8 +31,20 @@ void PerceptionService::observe(const std::string& instanceId, int sequence,
         lastObservedSequence_ = -1;
     }
 
-    // 去重：忽略同实例下更旧或重复的观察。
-    if (sequence <= lastObservedSequence_) return;
+    // 去重：重复观察（==）直接忽略——幂等命令（已巡检的 START_PATROL、未巡检的
+    // STOP_PATROL）会以同一 sequence 再次触发观察，若补记 CONTACT 会产生重复事件。
+    if (sequence == lastObservedSequence_) {
+        return;
+    }
+    // 乱序观察（<）：观察可能因「命令线程与巡检线程都在控制器锁外调用 observer」而
+    // 乱序到达（高序列先取得感知锁）。此时不能更新 latest_ 与活动检测集——那会把
+    // 快照回退、且异常进出事件会基于错误的 activeDetections_ 基线产生假事件；
+    // 但接触事件（CONTACT）只依赖运动结果、不依赖活动集，是安全相关的边沿信号，
+    // 乱序到达时仍须补记，否则并发命令会「偷跑」更高序列而丢巡检步的接触事件。
+    if (sequence < lastObservedSequence_) {
+        appendContactEventLocked(instanceId, sequence, position, lastResult);
+        return;
+    }
     lastObservedSequence_ = sequence;
 
     // RESET：重新随机化异常源位置（修复位置固定不变的缺陷），
@@ -70,15 +82,7 @@ void PerceptionService::observe(const std::string& instanceId, int sequence,
     }
 
     // 4) 接触事件（lastResult 首次变为受阻态）。
-    if (lastResult == LastResult::BlockedBoundary) {
-        appendEventLocked(PerceptionEventType::ContactBoundary, instanceId,
-                          sequence, position, std::nullopt,
-                          LastResult::BlockedBoundary);
-    } else if (lastResult == LastResult::BlockedObstacle) {
-        appendEventLocked(PerceptionEventType::ContactObstacle, instanceId,
-                          sequence, position, std::nullopt,
-                          LastResult::BlockedObstacle);
-    }
+    appendContactEventLocked(instanceId, sequence, position, lastResult);
 
     // 5) 更新活动检测与最新观察（原子发布）。
     activeDetections_ = detections;
@@ -141,6 +145,20 @@ PerceptionEventsView PerceptionService::events(int after, int limit) const {
         ++returned;
     }
     return view;
+}
+
+void PerceptionService::appendContactEventLocked(
+    const std::string& instanceId, int sequence, Position position,
+    LastResult lastResult) {
+    if (lastResult == LastResult::BlockedBoundary) {
+        appendEventLocked(PerceptionEventType::ContactBoundary, instanceId,
+                          sequence, position, std::nullopt,
+                          LastResult::BlockedBoundary);
+    } else if (lastResult == LastResult::BlockedObstacle) {
+        appendEventLocked(PerceptionEventType::ContactObstacle, instanceId,
+                          sequence, position, std::nullopt,
+                          LastResult::BlockedObstacle);
+    }
 }
 
 void PerceptionService::appendEventLocked(

@@ -694,7 +694,7 @@ detected = distance <= hazardRangeCells
 
 1. 服务启动组装完成后，对 `sequence = 0` 的初始快照生成第一次观察。
 2. 每条已受理非幂等命令和每个巡检步完成后，以不可变快照触发一次观察；幂等空操作不强制生成新观察。
-3. 感知服务按 `(instanceId, sequence)` 去重，忽略重复或同实例下更旧的观察。
+3. 感知服务按 `(instanceId, sequence)` 去重：重复（同 sequence）观察完全忽略；同实例下更旧的观察不回写最新快照或活动检测集，但保留其中的接触事件（CONTACT），防止并发命令「偷跑」更高序列而丢巡检步的受阻信号。
 4. 一次观察内依次计算三向测距、全部异常检测、活动状态差异和接触事件，再一次性发布最新观察与新增事件。
 5. 当该序列号首次观察到 `lastResult = BLOCKED_BOUNDARY` 时生成 `CONTACT_BOUNDARY`；`BLOCKED_OBSTACLE` 同理。普通测距命中不重复生成 CONTACT 事件。
 6. 观察生成必须在每个巡检步被调用，不能只靠前端 1 秒轮询补采，否则会漏掉 250 ms 间隔内的状态。

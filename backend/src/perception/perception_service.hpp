@@ -62,6 +62,12 @@ private:
                            const std::optional<Detection>& hazard,
                            const std::optional<LastResult>& contact);
 
+    // 补记接触事件（CONTACT 是运动结果的边沿信号，不依赖活动检测集）。
+    // 乱序观察被去重时也调用，避免并发命令「偷跑」更高序列时，巡检步的
+    // 受阻接触事件被静默丢弃。
+    void appendContactEventLocked(const std::string& instanceId, int sequence,
+                                  Position position, LastResult lastResult);
+
     // RESET 后重新随机化 config_.hazards 的位置（须持有 mutex_）。
     void randomizeHazardsLocked();
 

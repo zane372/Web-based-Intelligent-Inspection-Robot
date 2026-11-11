@@ -220,6 +220,51 @@ TEST(PerceptionService, ContactEvents) {
     EXPECT_EQ(*ev.events[1].contactResult, LastResult::BlockedObstacle);
 }
 
+TEST(PerceptionService, OutOfOrderContactEventIsPreserved) {
+    // 乱序观察：命令线程「偷跑」更高序列后，巡检步的受阻观察（低序列）后到。
+    // 接触事件（CONTACT）是运动结果的边沿信号、不依赖活动集，须补记而不丢失；
+    // 但 latest_ 不得回退到旧序列、异常活动集不得被旧快照覆盖。
+    auto config = makeConfig(3, 2, {makeHazard("h1", Position{5, 0})});
+    PerceptionService svc(config, "inst-1", Grid(10, 10));
+
+    // 高序列先到：位于 (0,0)，距 h1 距离 5 > 2，无异常、无接触。
+    svc.observe("inst-1", 2, Position{0, 0}, Direction::Right,
+                LastResult::Moved);
+    // 低序列后到（乱序）：受阻于边界 → 应补记 CONTACT。
+    svc.observe("inst-1", 1, Position{0, 0}, Direction::Left,
+                LastResult::BlockedBoundary);
+
+    const auto view = svc.latest();
+    EXPECT_EQ(view.latestEventId, 1);  // 仅 1 条 CONTACT
+    EXPECT_TRUE(view.observation.has_value());
+    EXPECT_EQ(view.observation->sequence, 2);  // latest 不回退到 seq 1
+
+    const auto ev = svc.events(0, 50);
+    ASSERT_EQ(ev.events.size(), 1u);
+    EXPECT_EQ(ev.events[0].type, PerceptionEventType::ContactBoundary);
+    EXPECT_EQ(ev.events[0].sequence, 1);  // 事件保留原始序列号
+    ASSERT_TRUE(ev.events[0].contactResult.has_value());
+    EXPECT_EQ(*ev.events[0].contactResult, LastResult::BlockedBoundary);
+}
+
+TEST(PerceptionService, DuplicateObservationDoesNotDuplicateContact) {
+    // 同一受阻 sequence 被观察两次（幂等命令以当前 sequence 再次触发观察）
+    // → 只应产生一条 CONTACT，第二条为重复直接忽略。
+    auto config = makeConfig(3, 2, {});
+    PerceptionService svc(config, "inst-1", Grid(10, 10));
+
+    svc.observe("inst-1", 1, Position{0, 0}, Direction::Left,
+                LastResult::BlockedBoundary);
+    svc.observe("inst-1", 1, Position{0, 0}, Direction::Left,
+                LastResult::BlockedBoundary);
+
+    const auto ev = svc.events(0, 50);
+    ASSERT_EQ(ev.events.size(), 1u);
+    EXPECT_EQ(ev.events[0].type, PerceptionEventType::ContactBoundary);
+    EXPECT_EQ(ev.events[0].sequence, 1);
+    EXPECT_EQ(svc.latest().latestEventId, 1);
+}
+
 TEST(PerceptionService, DisabledConfigNoOp) {
     // VP-12（未启用部分）：enabled=false → 观察不生效，返回空功能视图。
     auto config = makeConfig(3, 2, {makeHazard("h1", Position{5, 0})},
