@@ -65,7 +65,8 @@ describe("state reducer", () => {
     const s1 = reduce(s0, { type: "pollOk", robot: robot({ instanceId: "i2" }) });
     expect(s1.ui).toBe("LOADING");
     expect(s1.instanceChanged).toBe(true);
-    expect(s1.robot).toBeNull();
+    // 保留旧快照（不置 null），否则后续过期响应会跳过 instanceId/sequence 校验。
+    expect(s1.robot?.instanceId).toBe("i1");
   });
 
   it("连续 3 次轮询失败进入 DISCONNECTED", () => {
@@ -174,7 +175,28 @@ describe("state reducer", () => {
     const s2 = reduce(s1, { type: "commandFailed", robot: robot({ instanceId: "i2" }) });
     expect(s2.ui).toBe("LOADING");
     expect(s2.instanceChanged).toBe(true);
-    expect(s2.robot).toBeNull();
+    // 保留旧快照，防过期响应打回 READY。
+    expect(s2.robot?.instanceId).toBe("i1");
+  });
+
+  it("LOADING 期间收到旧实例的过期轮询不回退到 READY", () => {
+    // 复现 M-3 竞态：服务重启后 commandFailed 先置 LOADING，随后在途的旧轮询
+    // 返回旧实例数据。旧实现会因 robot 被置 null 而跳过校验、把 LOADING 打回
+    // READY 并写入旧数据；修复后应保持 LOADING 直到 loadAll 完成。
+    const s0 = reduce(createInitialState(), {
+      type: "loaded", map, robot: robot({ instanceId: "i1", sequence: 5 }),
+    });
+    // 轮询发现服务重启：进入 LOADING（保留旧快照 i1）。
+    const s1 = reduce(s0, { type: "pollOk", robot: robot({ instanceId: "i2" }) });
+    expect(s1.ui).toBe("LOADING");
+    // 在途的旧轮询返回旧实例（i1）数据：不得把 LOADING 打回 READY。
+    const s2 = reduce(s1, {
+      type: "pollOk",
+      robot: robot({ instanceId: "i1", sequence: 6, position: { x: 3, y: 3 } }),
+    });
+    expect(s2.ui).toBe("LOADING");
+    // 数据可更新（旧实例快照），但 UI 态仍是 LOADING。
+    expect(s2.robot?.instanceId).toBe("i1");
   });
 
   it("commandFailed 即使收到更小序列号也回到 READY 并刷新快照（不做过期丢弃）", () => {

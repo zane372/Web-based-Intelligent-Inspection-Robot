@@ -434,7 +434,7 @@ flowchart TB
 1. 初始化并行请求地图和机器人状态；失败最多尝试 3 次，每次间隔 1 秒，仍失败则断连。
 2. 命令成功后立即用响应中的 `robot` 重绘，不等待下一次轮询。
 3. 页面可见时每 1000 ms 查询机器人，隐藏时暂停，重新可见时立即查询。
-4. 同实例下忽略较小 `sequence` 的迟到快照；`instanceId` 变化时清空旧机器人状态，重新加载地图和状态。
+4. 同实例下忽略较小 `sequence` 的迟到快照；`instanceId` 变化时进入 `LOADING` 重新加载地图和状态，并保留旧快照以继续 instanceId/sequence 校验（防止过期响应把 LOADING 打回 READY）。
 5. 轮询连续失败 3 次进入 `DISCONNECTED`；失败期间保留最后确认数据并标记异常。
 6. POST 不自动重试；超时或失败后先 GET 真实状态，避免重复执行一次点击。
 7. 当前 UI 状态为 `LOADING`、`READY`、`EXECUTING`、`BOUNDARY_FEEDBACK`、`DEGRADED`、`DISCONNECTED`；内部名称 `BOUNDARY_FEEDBACK` 同时覆盖边界和障碍反馈。

@@ -86,11 +86,12 @@ export function reduce(state: AppState, event: AppEvent): AppState {
     case "pollOk": {
       const prev = state.robot;
       // 服务重启：instanceId 变化，进入 LOADING 并触发重载。
+      // 保留旧快照（不置 null），否则后续过期响应会因 prev 为空而跳过
+      // instanceId/sequence 校验，把 LOADING 提前打回 READY 并写入旧数据。
       if (prev && event.robot.instanceId !== prev.instanceId) {
         return {
           ...state,
           ui: "LOADING",
-          robot: null,
           instanceChanged: true,
           patrolAlert: null,
         };
@@ -99,10 +100,13 @@ export function reduce(state: AppState, event: AppEvent): AppState {
       if (prev && event.robot.sequence < prev.sequence) {
         return state;
       }
-      // 命令执行中或边界/障碍反馈展示期间收到轮询：只更新数据，保持当前
-      // UI 态以免按钮提前放开或反馈文案被 1s 轮询秒覆盖（反馈由 1.5s 定时器收尾）。
+      // 命令执行中、边界/障碍反馈展示期间或重载（LOADING）期间收到轮询：
+      // 只更新数据，保持当前 UI 态以免按钮提前放开或反馈文案被 1s 轮询秒覆盖
+      // （反馈由 1.5s 定时器收尾）；LOADING 期间旧实例的过期轮询同样不得打回 READY。
       const ui: UiState =
-        state.ui === "EXECUTING" || state.ui === "BOUNDARY_FEEDBACK"
+        state.ui === "EXECUTING" ||
+        state.ui === "BOUNDARY_FEEDBACK" ||
+        state.ui === "LOADING"
           ? state.ui
           : "READY";
       return {
@@ -155,11 +159,11 @@ export function reduce(state: AppState, event: AppEvent): AppState {
     case "commandFailed": {
       const prev = state.robot;
       // 服务重启：instanceId 变化，进入 LOADING 并触发重载（与 pollOk 一致）。
+      // 同样保留旧快照，防过期响应打回 READY。
       if (prev && event.robot.instanceId !== prev.instanceId) {
         return {
           ...state,
           ui: "LOADING",
-          robot: null,
           instanceChanged: true,
           patrolAlert: null,
         };
