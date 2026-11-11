@@ -36,12 +36,24 @@ tests
 .env.*
 !.env.example
 # 密钥/证书/签名文件（与 .gitignore 对齐）：任何阶段都不得进入构建上下文。
-*.key
-*.pem
-*.p12
-*.pfx
-*.crt
-*.cer
+# 注意：.dockerignore 的裸 `*.ext` 只匹配根目录，必须用 `**/` 前缀才能匹配任意层级。
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/*.crt
+**/*.cer
+**/*.der
+**/*.ppk
+**/*.jks
+**/*.keystore
+**/*.asc
+**/*.gpg
+**/*.pgp
+**/id_rsa*
+**/id_ed25519*
+**/id_ecdsa*
+**/id_dsa*
 
 # 文档与本地参考资料
 *.md

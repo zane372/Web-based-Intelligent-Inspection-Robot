@@ -36,6 +36,19 @@ __pycache__/
 *.pem
 *.p12
 *.pfx
+*.crt
+*.cer
+*.der
+*.ppk
+*.jks
+*.keystore
+*.asc
+*.gpg
+*.pgp
+id_rsa*
+id_ed25519*
+id_ecdsa*
+id_dsa*
 
 # IDE / 编辑器
 .idea/

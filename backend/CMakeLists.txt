@@ -32,7 +32,7 @@ set(CROW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(CROW_FEATURES "" CACHE STRING "" FORCE)
 FetchContent_Declare(Crow
   GIT_REPOSITORY https://github.com/CrowCpp/Crow.git
-  GIT_TAG 93bd8fa05d440383037f43803380ee58400fb8da # v1.2.0
+  GIT_TAG 94a011b9f7c0a991e5382927a2dbe5a7d9a056b8 # v1.2.0
   # 请求体缓冲上限补丁（防超大 body 在进入 handler 前耗尽内存，见 SPEC 7 防御边界）。
   # 注意：PATCH_COMMAND 仅在 FetchContent 首次下载时执行；若变更补丁内容，
   # 需删除 build/_deps/crow-src 让 CMake 重新应用，否则会复用旧的未打补丁源。
