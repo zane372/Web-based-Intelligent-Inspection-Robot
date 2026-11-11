@@ -99,6 +99,12 @@ let perceptionEventsInFlight = false;
 
 function dispatch(event: AppEvent): void {
   state = reduce(state, event);
+  if (state.ui === "LOADING" && feedbackTimer !== undefined) {
+    // 进入 LOADING（服务重启/手动重连）后，旧的边界反馈已失效，清除待触发的
+    // feedbackTimeout，避免它在重载窗口内把状态拉回 READY。
+    window.clearTimeout(feedbackTimer);
+    feedbackTimer = undefined;
+  }
   if (state.patrolAlert && patrolAlertTimer === undefined) {
     patrolAlertTimer = window.setTimeout(() => {
       patrolAlertTimer = undefined;

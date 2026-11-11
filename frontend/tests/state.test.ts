@@ -127,6 +127,18 @@ describe("state reducer", () => {
     expect(s.ui).toBe("READY");
   });
 
+  it("LOADING 期间 feedbackTimeout 不改变状态（服务重启竞态防护）", () => {
+    const s0 = reduce(createInitialState(), { type: "loaded", map, robot: robot() });
+    // 服务重启：pollOk 检测到 instanceId 变化进入 LOADING。
+    const s1 = reduce(s0, {
+      type: "pollOk",
+      robot: robot({ instanceId: "i2", sequence: 0 }),
+    });
+    expect(s1.ui).toBe("LOADING");
+    // 1.5s 反馈窗口内的 feedbackTimeout 不应把 LOADING 拉回 READY。
+    expect(reduce(s1, { type: "feedbackTimeout" }).ui).toBe("LOADING");
+  });
+
   it("EXECUTING 期间轮询只更新数据不改变状态", () => {
     const s0 = reduce(createInitialState(), { type: "loaded", map, robot: robot() });
     const s1 = reduce(s0, { type: "commandStart" });

@@ -180,7 +180,10 @@ export function reduce(state: AppState, event: AppEvent): AppState {
     }
 
     case "feedbackTimeout":
-      return { ...state, ui: "READY" };
+      // 仅 BOUNDARY_FEEDBACK 展示期结束才收尾到 READY；其它态（LOADING/DEGRADED/
+      // DISCONNECTED/EXECUTING）保持不变，防止 1.5s 定时器在服务重启或断连窗口内
+      // 把状态错误拉回 READY（按钮提前放开）。
+      return state.ui === "BOUNDARY_FEEDBACK" ? { ...state, ui: "READY" } : state;
 
     case "patrolAlertTimeout":
       return { ...state, patrolAlert: null };
