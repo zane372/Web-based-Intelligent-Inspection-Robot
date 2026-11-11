@@ -4,6 +4,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -25,6 +26,10 @@ namespace patrol {
 // - 线程体 `loop` 只在该互斥量上做 `wait_for`，醒来后释放锁推进。
 // - 停止路径：先置 active=false 并通知条件变量，把线程移出，
 //   由调用方在锁外 join（AR-CON-004）。
+// - 代际计数 generation_：start 与 stopAndTakeThread 各 +1；loop 以启动时
+//   传入的代际值为入参，重新加锁后校验 generation_ 是否仍相等，从而消除
+//   布尔 active_ 在「锁外观察者回调窗口」内被 Stop→Start 翻转造成的 ABA
+//   （旧线程被并发 StartPatrol 复活、与新线程双线程推进同一巡检）。
 class PatrolExecutor {
 public:
     PatrolExecutor() = default;
@@ -75,12 +80,15 @@ public:
     RobotSnapshot stepSnapshot() const { return stepSnapshot_; }
 
 private:
-    void loop(std::mutex& mutex, Robot& robot, const Grid& grid, int& sequence);
+    void loop(std::mutex& mutex, Robot& robot, const Grid& grid, int& sequence,
+              std::uint64_t generation);
 
     // 在控制器锁保护下构造快照（调用方须持有锁）。
     RobotSnapshot buildSnapshotLocked(const Robot& robot, int sequence) const;
 
     bool active_{false};
+    // 巡检会话代际：每次 start/stop 递增，供 loop 识别陈旧线程（见类注释）。
+    std::uint64_t generation_{0};
     std::vector<Direction> patrolPath_;
     std::size_t patrolIndex_{0};
     std::thread thread_;

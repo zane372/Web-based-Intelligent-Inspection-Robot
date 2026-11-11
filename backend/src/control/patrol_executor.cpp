@@ -8,14 +8,21 @@ namespace patrol {
 
 void PatrolExecutor::start(std::vector<Direction> path, std::mutex& mutex,
                            Robot& robot, const Grid& grid, int& sequence) {
+    // 递增代际并传给线程：loop 以该值为本次会话身份，重新加锁后若
+    // generation_ 已变化（并发 Stop/Start）则立即退出，避免旧线程复活。
+    ++generation_;
+    const std::uint64_t generation = generation_;
     patrolPath_ = std::move(path);
     patrolIndex_ = 0;
     active_ = true;
     thread_ = std::thread(&PatrolExecutor::loop, this, std::ref(mutex),
-                          std::ref(robot), std::ref(grid), std::ref(sequence));
+                          std::ref(robot), std::ref(grid), std::ref(sequence),
+                          generation);
 }
 
 std::thread PatrolExecutor::stopAndTakeThread() {
+    // 递增代际使任何尚未退出的旧线程在下一次加锁后识别出代际失配而退出。
+    ++generation_;
     active_ = false;
     cv_.notify_all();
     std::thread t;
@@ -127,11 +134,13 @@ bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
 }
 
 void PatrolExecutor::loop(std::mutex& mutex, Robot& robot, const Grid& grid,
-                          int& sequence) {
+                          int& sequence, std::uint64_t generation) {
     std::unique_lock<std::mutex> lock(mutex);
-    while (active_) {
-        cv_.wait_for(lock, intervalMs_.load(), [this] { return !active_; });
-        if (!active_) {
+    while (active_ && generation_ == generation) {
+        cv_.wait_for(lock, intervalMs_.load(), [this, generation] {
+            return !active_ || generation_ != generation;
+        });
+        if (!active_ || generation_ != generation) {
             break;
         }
         // stepReplanned 以锁被持有的状态进入，内部仅在规划时短暂释放锁。
