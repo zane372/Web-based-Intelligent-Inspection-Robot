@@ -42,6 +42,7 @@ jobs:
     # 仅当 main 上 base-ci 成功完成时触发持续预发布；workflow_dispatch 不构建。
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -111,6 +112,7 @@ jobs:
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     needs: build-and-push
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: staging
     concurrency:
       group: cd-staging
@@ -147,6 +149,7 @@ jobs:
     # production Environment 强制人工审批（SPEC 9.4/9.6）。
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'promote'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: production
     concurrency:
       group: cd-production
@@ -203,6 +206,7 @@ jobs:
   rollback:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'rollback'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: production
     concurrency:
       group: cd-production

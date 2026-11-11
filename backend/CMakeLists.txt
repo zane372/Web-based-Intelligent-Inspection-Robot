@@ -19,10 +19,10 @@ include(FetchContent)
 
 # ---- 依赖（全部固定 release 锁定，见 SPEC 5.6）----
 
-# nlohmann/json 3.11.3
+# nlohmann/json 3.11.3（固定到 tag 对应 commit SHA，防可变 tag 被改写，见 SPEC 7 供应链）
 FetchContent_Declare(json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG v3.11.3
+  GIT_TAG 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03 # v3.11.3
 )
 FetchContent_MakeAvailable(json)
 
@@ -32,7 +32,7 @@ set(CROW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(CROW_FEATURES "" CACHE STRING "" FORCE)
 FetchContent_Declare(Crow
   GIT_REPOSITORY https://github.com/CrowCpp/Crow.git
-  GIT_TAG v1.2.0
+  GIT_TAG 93bd8fa05d440383037f43803380ee58400fb8da # v1.2.0
   # 请求体缓冲上限补丁（防超大 body 在进入 handler 前耗尽内存，见 SPEC 7 防御边界）。
   # 注意：PATCH_COMMAND 仅在 FetchContent 首次下载时执行；若变更补丁内容，
   # 需删除 build/_deps/crow-src 让 CMake 重新应用，否则会复用旧的未打补丁源。
@@ -40,10 +40,10 @@ FetchContent_Declare(Crow
 )
 FetchContent_MakeAvailable(Crow)
 
-# GoogleTest 1.15.2
+# GoogleTest 1.15.2（固定到 tag 对应 commit SHA）
 FetchContent_Declare(googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG v1.15.2
+  GIT_TAG b514bdc898e2951020cbdca1304b75f5950d1f59 # v1.15.2
 )
 FetchContent_MakeAvailable(googletest)
 

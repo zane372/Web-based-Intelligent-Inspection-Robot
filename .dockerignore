@@ -35,6 +35,13 @@ tests
 .env
 .env.*
 !.env.example
+# 密钥/证书/签名文件（与 .gitignore 对齐）：任何阶段都不得进入构建上下文。
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
 
 # 文档与本地参考资料
 *.md

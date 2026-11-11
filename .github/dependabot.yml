@@ -11,3 +11,23 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
+  # 前端依赖（vite/vitest/esbuild/typescript-eslint）与 Actions 版本也需要持续跟踪，
+  # 避免已知 CVE（如 esbuild GHSA-67mh-4wv8-2f99）与浮动 Action 长期滞留。
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+      time: "08:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      time: "08:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
