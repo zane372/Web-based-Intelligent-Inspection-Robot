@@ -139,6 +139,15 @@ export function reduce(state: AppState, event: AppEvent): AppState {
 
     case "commandDone": {
       const prev = state.robot;
+      // 重载期间或命令响应来自不同实例（服务重启）：一律忽略。LOADING 的唯一
+      // 正道是 loaded；实例变化由 pollOk 检测并触发重载，在途命令响应不得把
+      // LOADING/当前态覆盖回 BOUNDARY_FEEDBACK 或旧实例数据。
+      if (
+        state.ui === "LOADING" ||
+        (prev && event.robot.instanceId !== prev.instanceId)
+      ) {
+        return state;
+      }
       // 防御性：若响应比当前快照旧则丢弃，仅回到 READY。
       if (prev && event.robot.sequence < prev.sequence) {
         return { ...state, ui: "READY" };

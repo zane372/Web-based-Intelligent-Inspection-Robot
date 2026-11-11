@@ -114,6 +114,37 @@ describe("state reducer", () => {
     expect(s2.robot?.position).toEqual({ x: 1, y: 0 });
   });
 
+  it("LOADING 期间 commandDone 被忽略（重载中迟到命令响应不覆盖状态）", () => {
+    const s0 = reduce(createInitialState(), { type: "loaded", map, robot: robot() });
+    const s1 = reduce(s0, { type: "commandStart" });
+    // 服务重启：pollOk 检测到 instanceId 变化进入 LOADING。
+    const s2 = reduce(s1, { type: "pollOk", robot: robot({ instanceId: "i2" }) });
+    expect(s2.ui).toBe("LOADING");
+    // 在途命令响应（旧实例 i1）不得把 LOADING 覆盖回 READY/BOUNDARY_FEEDBACK。
+    const s3 = reduce(s2, {
+      type: "commandDone",
+      robot: robot({ instanceId: "i1", sequence: 1, lastResult: "MOVED" }),
+      result: "MOVED",
+    });
+    expect(s3.ui).toBe("LOADING");
+    expect(s3.robot?.sequence).toBe(0);
+  });
+
+  it("commandDone 来自旧实例被忽略（重载后迟到响应不覆盖新实例状态）", () => {
+    const s0 = reduce(createInitialState(), {
+      type: "loaded", map, robot: robot({ instanceId: "i2", sequence: 3 }),
+    });
+    // 迟到命令响应来自旧实例 i1 → 忽略，保持当前 i2 状态。
+    const s1 = reduce(s0, {
+      type: "commandDone",
+      robot: robot({ instanceId: "i1", sequence: 5, lastResult: "MOVED" }),
+      result: "MOVED",
+    });
+    expect(s1.ui).toBe("READY");
+    expect(s1.robot?.instanceId).toBe("i2");
+    expect(s1.robot?.sequence).toBe(3);
+  });
+
   it("命令被障碍阻挡进入 BOUNDARY_FEEDBACK", () => {
     let s = reduce(createInitialState(), { type: "loaded", map, robot: robot() });
     s = reduce(s, { type: "commandStart" });
