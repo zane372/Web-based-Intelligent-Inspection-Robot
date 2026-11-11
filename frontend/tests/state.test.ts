@@ -242,7 +242,7 @@ describe("state reducer", () => {
     expect(s2.robot?.instanceId).toBe("i1");
   });
 
-  it("commandFailed 即使收到更小序列号也回到 READY 并刷新快照（不做过期丢弃）", () => {
+  it("commandFailed 收到更小序列号时回到 READY 但保留更新的快照（不做过期回写）", () => {
     const s0 = reduce(createInitialState(), {
       type: "loaded", map, robot: robot({ sequence: 5 }),
     });
@@ -252,7 +252,7 @@ describe("state reducer", () => {
       robot: robot({ sequence: 3, lastResult: "MOVED" }),
     });
     expect(s2.ui).toBe("READY");
-    expect(s2.robot?.sequence).toBe(3);
+    expect(s2.robot?.sequence).toBe(5);
   });
 
   it("命令失败时若巡检受阻仍正确设置报警锁存", () => {

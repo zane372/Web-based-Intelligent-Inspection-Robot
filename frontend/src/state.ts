@@ -179,12 +179,16 @@ export function reduce(state: AppState, event: AppEvent): AppState {
       }
       // 命令发送失败但服务仍可达（fetchRobot 成功）：回到 READY 并刷新快照，
       // 避免命令失败后 pollOk 把 UI 永久锁死在 EXECUTING。
+      // 若恢复快照比当前更旧（sequence 更小，来自迟到的并发轮询/多副本），保留
+      // 当前更新的快照不回写，但仍要退出 EXECUTING 回到 READY（否则卡死）。
+      const robot =
+        prev && event.robot.sequence < prev.sequence ? prev : event.robot;
       return {
         ...state,
         ui: "READY",
-        robot: event.robot,
+        robot,
         pollFailures: 0,
-        patrolAlert: patrolAlertFor(event.robot, state.patrolAlert),
+        patrolAlert: patrolAlertFor(robot, state.patrolAlert),
       };
     }
 
