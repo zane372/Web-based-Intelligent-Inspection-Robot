@@ -118,7 +118,7 @@ docker compose down
 cmake -S backend -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
-# 启动后端（默认监听 0.0.0.0:8080）
+# 启动后端（默认监听 127.0.0.1:8080）
 ./build/patrol_server
 ```
 

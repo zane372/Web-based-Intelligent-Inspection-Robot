@@ -43,7 +43,7 @@ int main() {
 
     const std::string mapPath = envOr("MAP_CONFIG", "config/map.json");
     const std::string staticRoot = envOr("STATIC_ROOT", "web");
-    const std::string host = envOr("APP_HOST", "0.0.0.0");
+    const std::string host = envOr("APP_HOST", "127.0.0.1");
     const int port = std::atoi(envOr("APP_PORT", "8080").c_str());
 
     // 配置加载失败按规格以非零码退出，并输出具体字段。

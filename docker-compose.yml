@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     image: patrol-sim-base:local
     ports:
-      - "${HOST_PORT:-8080}:8080"
+      - "127.0.0.1:${HOST_PORT:-8080}:8080"
     environment:
       APP_HOST: 0.0.0.0
       APP_PORT: "8080"
