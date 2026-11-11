@@ -179,13 +179,13 @@ pytest tests/integration -q --base-url http://127.0.0.1:8080
 
 ## 分工与贡献
 
-| 成员／方向 | 主责模块 | 说明 |
+| 方向 | 主责模块 | 说明 |
 | --- | --- | --- |
-| 成员 A／实现算法 | `backend/src/domain/`、`backend/tests/` 仿真单元测试 | 离散移动、边界/障碍规则、四方向增量、重置、Boustrophedon 单元分解 + 贪心 BFS 组合策略巡检规划 |
-| 成员 B／全栈 | `frontend/`、页面集成、根 README 与展示材料 | Canvas 绘制（含障碍物/异常图层）、API Client、UI 状态机、巡检按钮、感知面板、联调 |
-| 成员 C／运维 | `Dockerfile`、`docker-compose.yml`、`.dockerignore`、`.github/workflows/{ci,cd}.yml` | 多阶段构建、非 root、CI 三 job、CD（GHCR digest、Staging、生产审批/回滚） |
-| 成员 D／嵌入式（虚拟设备软件） | `backend/src/api/`、`backend/src/control/`、`backend/src/perception/`、`main.cpp`、配置加载 | API 契约、严格校验、序列号、巡检线程控制（PatrolExecutor）、虚拟感知服务、静态托管 |
-| 成员 E／人工智能（质量保障） | `tests/integration/`、验收矩阵、测试报告 | pytest 黑盒测试、健康等待、错误路径覆盖、感知契约 |
+| 算法 | `backend/src/domain/`、`backend/tests/` 仿真单元测试 | 离散移动、边界/障碍规则、四方向增量、重置、Boustrophedon 单元分解 + 贪心 BFS 组合策略巡检规划 |
+| 全栈 | `frontend/`、页面集成、根 README 与展示材料 | Canvas 绘制（含障碍物/异常图层）、API Client、UI 状态机、巡检按钮、感知面板、联调 |
+| 运维 | `Dockerfile`、`docker-compose.yml`、`.dockerignore`、`.github/workflows/{ci,cd}.yml` | 多阶段构建、非 root、CI 三 job、CD（GHCR digest、Staging、生产审批/回滚） |
+| 嵌入式（虚拟设备软件） | `backend/src/api/`、`backend/src/control/`、`backend/src/perception/`、`main.cpp`、配置加载 | API 契约、严格校验、序列号、巡检线程控制（PatrolExecutor）、虚拟感知服务、静态托管 |
+| 人工智能（质量保障） | `tests/integration/`、验收矩阵、测试报告 | pytest 黑盒测试、健康等待、错误路径覆盖、感知契约 |
 
 ## 故障排查
 
