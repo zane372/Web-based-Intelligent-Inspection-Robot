@@ -42,6 +42,9 @@ function headingVector(heading: Heading): { x: number; y: number } {
       return { x: -1, y: 0 };
     case "RIGHT":
       return { x: 1, y: 0 };
+    default:
+      // 防御：非法 heading 已被 validate 拦截，理论不可达；返回零向量避免 drawRobot 崩溃。
+      return { x: 0, y: 0 };
   }
 }
 
