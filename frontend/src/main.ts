@@ -475,7 +475,7 @@ async function onCommand(type: CommandType, direction?: Heading): Promise<void> 
   } catch {
     try {
       const robot = await fetchRobot();
-      dispatch({ type: "pollOk", robot });
+      dispatch({ type: "commandFailed", robot });
     } catch {
       dispatch({ type: "pollFail" });
     }

@@ -31,6 +31,7 @@ export type AppEvent =
   | { type: "disconnect" }
   | { type: "commandStart" }
   | { type: "commandDone"; robot: RobotState; result: CommandResult }
+  | { type: "commandFailed"; robot: RobotState }
   | { type: "feedbackTimeout" }
   | { type: "patrolAlertTimeout" };
 
@@ -141,6 +142,29 @@ export function reduce(state: AppState, event: AppEvent): AppState {
       return {
         ...state,
         ui,
+        robot: event.robot,
+        pollFailures: 0,
+        patrolAlert: patrolAlertFor(event.robot, state.patrolAlert),
+      };
+    }
+
+    case "commandFailed": {
+      const prev = state.robot;
+      // 服务重启：instanceId 变化，进入 LOADING 并触发重载（与 pollOk 一致）。
+      if (prev && event.robot.instanceId !== prev.instanceId) {
+        return {
+          ...state,
+          ui: "LOADING",
+          robot: null,
+          instanceChanged: true,
+          patrolAlert: null,
+        };
+      }
+      // 命令发送失败但服务仍可达（fetchRobot 成功）：回到 READY 并刷新快照，
+      // 避免命令失败后 pollOk 把 UI 永久锁死在 EXECUTING。
+      return {
+        ...state,
+        ui: "READY",
         robot: event.robot,
         pollFailures: 0,
         patrolAlert: patrolAlertFor(event.robot, state.patrolAlert),
