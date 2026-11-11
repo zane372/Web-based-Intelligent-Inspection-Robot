@@ -38,13 +38,15 @@ Traefik 与 `app` 同处 `traefik-net` 桥接网络；app 通过 Docker Provider
 
 ## 4. 配置说明
 
+> **Traefik 版本**：使用 `traefik:v3.7.18`。本项目 Docker 引擎为 29.x，其 Docker API 拒绝 `API < 1.40` 的请求（返回 400 Bad Request）；Traefik v3.5 内置的 Docker 客户端请求的 API 版本低于 1.40，会导致 Docker Provider 无法发现容器、对外统一 404。v3.7 起兼容 Docker 29 API，**勿降级到 3.7 以下**。
+
 | 文件 | 类型 | 作用 |
 | --- | --- | --- |
 | `traefik/traefik.yml` | 静态配置 | 入口点（web/dashboard）、Docker+File Provider、API/Dashboard、日志 |
 | `traefik/dynamic.yml` | 动态配置 | 中间件（`body-limit`、`app-auth`、`dashboard-auth`）+ 管理面板路由 |
 | `docker-compose.yml` | Compose | `traefik` 服务 + `app` 容器的 `traefik.http.*` label |
 
-- **静态配置**（改动需重启 Traefik）：`entryPoints.web=:80`、`entryPoints.dashboard=:8082`、`providers.docker`（`exposedByDefault=false`，仅发现 `traefik.enable=true` 的容器）、`providers.file`（读 `dynamic.yml`）、`api.dashboard=true`（secure 模式）。
+- **静态配置**（改动需重启 Traefik）：`entryPoints.web=:80`、`entryPoints.dashboard=:8082`、`providers.docker`（`exposedByDefault=false`，仅发现 `traefik.enable=true` 的容器；不显式指定 network，由 Traefik 自动选择与容器共享的网络）、`providers.file`（读 `dynamic.yml`）、`api.dashboard=true`（secure 模式）、`ping:{}`（供容器 healthcheck）、`global.aliasHeadersStrategy=reject`（防别名头伪装，v3.7 新增）。
 - **动态配置**（热加载，无需重启）：`body-limit`（`buffering.maxRequestBodyBytes=4096`）、`app-auth`／`dashboard-auth`（`basicAuth`）、`dashboard` 路由（指向内置 `api@internal`）。
 - **app label**：`traefik.http.routers.app.rule=PathPrefix(\`/\`)`、`.entrypoints=web`、`.middlewares=app-auth@file,body-limit@file`、`.services.app.loadbalancer.server.port=8080`。中间件用 `@file` 后缀引用 File Provider 里的定义（跨 Provider 引用语法）。
 
@@ -86,6 +88,7 @@ certificatesResolvers:
 ## 7. 安全注意事项
 
 - **Docker socket**：`docker-compose.yml` 以只读（`:ro`）挂载 `/var/run/docker.sock` 供 Docker Provider 自动发现。只读能降低但不能消除风险；生产环境建议改用 [docker-socket-proxy](https://doc.traefik.io/traefik/providers/docker/#docker-socket-proxy) 收紧权限。
+- **防头注入（别名头伪装）**：`global.aliasHeadersStrategy=reject` 会在请求头名含非字母/数字/连字符（如 `X_Auth_User`、`X.Auth.User`）时直接返回 400，防止客户端伪装 Traefik 管理的头（如 basicAuth 结果）。
 - **默认口令**：`test / test` 仅演示，公网部署前必须更换（§5）。
 - **无应用层 TLS**：`127.0.0.1:8080` 直连仍为明文 HTTP，仅限本机回环；公网统一走 Traefik，务必加 HTTPS（§6）。
 - **请求体限制**：反代层 `4096` 上限与后端应用层一致，超限在 Traefik 即返回 `413`，避免超大请求体到达后端。

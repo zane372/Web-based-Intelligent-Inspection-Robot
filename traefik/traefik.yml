@@ -10,11 +10,20 @@
 api:
   dashboard: true
 
+# ---- 健康检查端点（供 Docker healthcheck 的 `traefik healthcheck` 使用）----
+ping: {}
+
 # ---- 日志与访问日志 ----
 log:
   level: INFO
 
 accessLog: {}
+
+# ---- 全局默认 ----
+global:
+  # 防头注入（Traefik v3.7 新增，作用于所有入口点）：
+  # 请求头名含非字母/数字/连字符（如 X_Auth_User）时直接返回 400，防止别名头伪装。
+  aliasHeadersStrategy: reject
 
 # ---- 入口点 ----
 entryPoints:
@@ -29,7 +38,8 @@ providers:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false   # 只有 traefik.enable=true 的容器才会被自动发现
     watch: true
-    network: "traefik-net"    # 指定通过哪个 Docker 网络访问被发现的容器
+    # 不显式指定 network：让 Traefik 自动选择与容器共享的网络，
+    # 避免写死 "traefik-net" 与 compose 项目名前缀不匹配（会告警并回退）。
   file:
     filename: "/etc/traefik/dynamic.yml"
     watch: true

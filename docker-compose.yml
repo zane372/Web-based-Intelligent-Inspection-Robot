@@ -3,11 +3,20 @@ services:
   # 对外访问统一经 Traefik（basicAuth 鉴权 + 请求体大小限制），
   # 管理面板仅绑定宿主机回环（127.0.0.1:8082）并单独鉴权。
   traefik:
-    image: traefik:v3.5
+    # v3.7 起才兼容 Docker 29.x 的 Docker API（v3.5 与 Docker 29 的 API 版本协商
+    # 会返回 400，导致 Docker Provider 无法发现容器 → 对外 404）。勿降到 3.7 以下。
+    image: traefik:v3.7.18
     container_name: traefik
     restart: unless-stopped
     command:
       - "--configFile=/etc/traefik/traefik.yml"
+    healthcheck:
+      # 用内置 ping 端点（traefik.yml 已启用 ping: {}），确认 Traefik 本身健康。
+      test: ["CMD", "traefik", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     ports:
       # 对外 HTTP 入口（带 basicAuth + 请求体限制，见 dynamic.yml 中间件）
       - "80:80"
