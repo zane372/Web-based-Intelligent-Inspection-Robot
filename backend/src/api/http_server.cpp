@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -232,6 +233,24 @@ std::string mimeTypeFor(const std::string& path) {
 crow::response serveStatic(const std::string& root, const std::string& urlPath) {
     std::string fullPath;
     if (!path_safety::safeJoin(root, urlPath, fullPath)) {
+        return crow::response(404, "not found");
+    }
+    // 符号链接防护：safeJoin 只做词法校验（拒 ..、\、盘符、空段），不解析
+    // symlink。若 staticRoot 下存在指向目录外的符号链接，ifstream 会跟随它读到
+    // 目录外文件。这里把 root 与请求路径都解析到真实位置（weakly_canonical
+    // 解析现有符号链接、对不存在的尾部保留），再校验请求路径仍落在 root 之内。
+    std::error_code ec;
+    const std::filesystem::path realRoot =
+        std::filesystem::weakly_canonical(root, ec);
+    if (ec) {
+        return crow::response(404, "not found");
+    }
+    const std::filesystem::path realPath =
+        std::filesystem::weakly_canonical(fullPath, ec);
+    if (ec) {
+        return crow::response(404, "not found");
+    }
+    if (!path_safety::isPathWithinRoot(realRoot, realPath)) {
         return crow::response(404, "not found");
     }
     std::ifstream in(fullPath, std::ios::binary | std::ios::ate);

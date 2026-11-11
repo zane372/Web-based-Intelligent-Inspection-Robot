@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 
 namespace patrol {
@@ -39,6 +40,21 @@ inline bool safeJoin(const std::string& root, const std::string& urlPath,
         start = sep + 1;
     }
     return true;
+}
+
+// 判断路径 p 是否等于 root 或位于 root 之内（按路径组件逐段比较）。
+// 入参须已是规范化路径（无 . 与 .. 段），由 std::filesystem::weakly_canonical
+// 保证；用于 safeJoin 之后的符号链接纵深防御（见 http_server.cpp serveStatic）。
+inline bool isPathWithinRoot(const std::filesystem::path& root,
+                             const std::filesystem::path& p) {
+    auto rootIt = root.begin();
+    auto pathIt = p.begin();
+    for (; rootIt != root.end(); ++rootIt, ++pathIt) {
+        if (pathIt == p.end() || *rootIt != *pathIt) {
+            return false;
+        }
+    }
+    return true;  // p 的每个 root 前缀组件都与 root 一致（p==root 或在其下）
 }
 
 }  // namespace path_safety
