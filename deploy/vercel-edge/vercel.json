@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["hnd1"],
+  "rewrites": [{ "source": "/api/:p*", "destination": "/api/router?p=:p*" }],
+  "headers": [
+    { "source": "/api/(.*)", "headers": [{ "key": "x-demo", "value": "edge" }] }
+  ]
+}

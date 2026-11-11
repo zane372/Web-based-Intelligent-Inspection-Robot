@@ -26,6 +26,10 @@ __pycache__/
 .vite/
 *.local
 
+# Vercel CLI 本地状态与构建产物（含项目绑定信息）
+.vercel/
+.vercel-edge/
+
 # 环境与密钥
 .env
 .env.*
@@ -64,6 +68,10 @@ Desktop.ini
 
 # 本地参考资料（非交付物）
 _reference/
+
+# 本地抓取的官方文档原文（仅学习参考，整理结论见 docs/traefik.md、docs/vercel-edge.md）
+traefik_docs/
+vercel_docs/
 
 # 本地 UI 核验截图（非交付物）
 .ui-screenshots/
