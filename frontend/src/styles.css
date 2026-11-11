@@ -183,7 +183,8 @@ body {
   /* 高度方向也留出余量，避免短屏下地图溢出视口。 */
   max-width: min(100%, calc(100vh - 210px));
   height: auto;
-  aspect-ratio: 1 / 1;
+  /* 显示比例取自画布内在宽高比（= 地图 width/height），不硬编码 1:1，
+     避免非正方形地图被 CSS 强制拉伸变形。 */
   display: block;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);

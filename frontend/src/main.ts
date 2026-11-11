@@ -514,4 +514,22 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// 跨 DPI 显示器拖动时 devicePixelRatio 会变化；画布 backing store 只在初始化
+// 采样一次会导致发虚。监听分辨率变化，变化时重置 ctx 触发重采样（L-15）。
+{
+  let dprMedia = window.matchMedia(
+    `(resolution: ${window.devicePixelRatio}dppx)`,
+  );
+  const onDprChange = (): void => {
+    if (ctx !== null) {
+      ctx = null;
+      render();
+    }
+    dprMedia.removeEventListener("change", onDprChange);
+    dprMedia = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    dprMedia.addEventListener("change", onDprChange);
+  };
+  dprMedia.addEventListener("change", onDprChange);
+}
+
 void loadAll();
