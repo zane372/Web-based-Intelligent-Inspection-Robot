@@ -11,6 +11,11 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
+    ignore:
+      # gcc 必须与运行时 debian:bookworm-slim 的 libstdc++6（GCC 12 / GLIBCXX_3.4.30）ABI 匹配，
+      # 升到 13+ 会引入 GLIBCXX_3.4.31+ 符号导致运行时崩溃（见 Dockerfile 注释）。
+      - dependency-name: "gcc"
+        versions: [">= 13"]
   # 前端依赖（vite/vitest/esbuild/typescript-eslint）与 Actions 版本也需要持续跟踪，
   # 避免已知 CVE（如 esbuild GHSA-67mh-4wv8-2f99）与浮动 Action 长期滞留。
   - package-ecosystem: npm

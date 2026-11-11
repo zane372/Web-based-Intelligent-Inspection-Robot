@@ -7,7 +7,10 @@ COPY frontend/ ./
 RUN npm run build
 
 # 阶段二：C++ 后端构建（Release + CTest）
-FROM gcc:15-bookworm@sha256:9ca91b05c7b07d2979f16413e8b2cd6ec8a7c80ffca4121ccab0aeba33f90460 AS cpp-build
+# 注：gcc 必须保持 12.x，与运行时 debian:bookworm-slim 的 libstdc++6（GCC 12，
+# GLIBCXX_3.4.30）ABI 匹配。升级到 gcc:15 会使二进制引用 GLIBCXX_3.4.33 符号，
+# 运行时崩溃（container-smoke 健康检查失败）。Dependabot 勿升此镜像。
+FROM gcc:12-bookworm@sha256:3d3af69c72edf0652bb3a829965142e81891899c7827d849bc3c0dbb9edd216a AS cpp-build
 WORKDIR /src
 RUN apt-get update \
     && apt-get install -y --no-install-recommends cmake ninja-build git ca-certificates libboost-system-dev libasio-dev \
