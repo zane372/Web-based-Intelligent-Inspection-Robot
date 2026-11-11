@@ -29,9 +29,11 @@ jobs:
           persist-credentials: false
 
       - name: Install Boost, Asio and ccache
-        # apt-get 偶发网络抖动（exit 100 / 长时间挂起），加超时快速失败 + 3 次重试。
+        # apt-get 偶发网络抖动/镜像极慢（exit 100 / 长时间挂起），先换 canonical 官方源，再加超时快速失败 + 3 次重试。
         run: |
           export DEBIAN_FRONTEND=noninteractive
+          # Azure 镜像偶发极慢/不可达，切回 canonical 官方源（Cloudflare 前端，更稳定）。
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources || true
           for i in 1 2 3; do
             if sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update \
                && sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 install -y --no-install-recommends libboost-system-dev libasio-dev ccache; then
