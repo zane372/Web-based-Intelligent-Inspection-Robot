@@ -429,18 +429,21 @@ flowchart TB
 
 边界和障碍物阻挡是已受理命令的正常业务结果，因此返回 201，不得误报为网络错误或 500。
 
+前端侧还有私有错误码 `INVALID_RESPONSE`（非后端返回，仅在客户端解析到畸形成功响应时抛出）：响应体不是 JSON 对象，或字段缺失/类型错误（字段级校验失败）。它不计入后端错误契约。
+
 ### 4.9 当前前端行为
 
 1. 初始化并行请求地图和机器人状态；失败最多尝试 3 次，每次间隔 1 秒，仍失败则断连。
 2. 命令成功后立即用响应中的 `robot` 重绘，不等待下一次轮询；重载期间或响应来自旧实例（`instanceId` 变化）时忽略该响应，由 `LOADING` 重新加载取回权威状态。
-3. 页面可见时每 1000 ms 查询机器人，隐藏时暂停，重新可见时立即查询。
-4. 同实例下忽略较小 `sequence` 的迟到快照；`instanceId` 变化时进入 `LOADING` 重新加载地图和状态，并保留旧快照以继续 instanceId/sequence 校验（防止过期响应把 LOADING 打回 READY）。
-5. 轮询连续失败 3 次进入 `DISCONNECTED`；失败期间保留最后确认数据并标记异常。
-6. POST 不自动重试；超时或失败后先 GET 真实状态，避免重复执行一次点击。
-7. 当前 UI 状态为 `LOADING`、`READY`、`EXECUTING`、`BOUNDARY_FEEDBACK`、`DEGRADED`、`DISCONNECTED`；内部名称 `BOUNDARY_FEEDBACK` 同时覆盖边界和障碍反馈。
-8. 执行期间禁用方向、重置和巡检按钮；巡检按钮文案随 `patrolActive` 切换。
-9. Canvas 使用 `(x + 0.5) * cellSize`、`(y + 0.5) * cellSize` 计算中心，默认 `cellSize = 32`；高 DPI 只缩放 backing store，不改变逻辑坐标。
-10. 控件使用原生按钮，状态有文字反馈；窄屏布局不得裁切主要控制。
+3. 成功响应在进入状态机/渲染层前做字段级校验（`frontend/src/api/validate.ts`），畸形对象（缺字段/类型错误）抛客户端 `INVALID_RESPONSE` 并计入轮询降级，不写入 state。
+4. 页面可见时每 1000 ms 查询机器人，隐藏时暂停，重新可见时立即查询。
+5. 同实例下忽略较小 `sequence` 的迟到快照；`instanceId` 变化时进入 `LOADING` 重新加载地图和状态，并保留旧快照以继续 instanceId/sequence 校验（防止过期响应把 LOADING 打回 READY）。
+6. 轮询连续失败 3 次进入 `DISCONNECTED`；失败期间保留最后确认数据并标记异常。
+7. POST 不自动重试；超时或失败后先 GET 真实状态，避免重复执行一次点击。
+8. 当前 UI 状态为 `LOADING`、`READY`、`EXECUTING`、`BOUNDARY_FEEDBACK`、`DEGRADED`、`DISCONNECTED`；内部名称 `BOUNDARY_FEEDBACK` 同时覆盖边界和障碍反馈。
+9. 执行期间禁用方向、重置和巡检按钮；巡检按钮文案随 `patrolActive` 切换。
+10. Canvas 使用 `(x + 0.5) * cellSize`、`(y + 0.5) * cellSize` 计算中心，默认 `cellSize = 32`；高 DPI 只缩放 backing store，不改变逻辑坐标。
+11. 控件使用原生按钮，状态有文字反馈；窄屏布局不得裁切主要控制。
 
 ---
 

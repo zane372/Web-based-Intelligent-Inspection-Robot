@@ -96,8 +96,9 @@ export interface PerceptionEvent {
   sequence: number;
   type: PerceptionEventType;
   position: Position;
-  hazard: Detection | null;
-  contactResult: "BLOCKED_BOUNDARY" | "BLOCKED_OBSTACLE" | null;
+  // 不适用字段后端省略而非输出 null（SPEC 6.7）：异常事件有 hazard、接触事件有 contactResult。
+  hazard?: Detection | null;
+  contactResult?: "BLOCKED_BOUNDARY" | "BLOCKED_OBSTACLE" | null;
 }
 
 export interface PerceptionLatest {

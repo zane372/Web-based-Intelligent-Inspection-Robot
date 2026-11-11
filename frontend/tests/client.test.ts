@@ -15,6 +15,7 @@ const robotJson = {
   motionStatus: "IDLE",
   lastResult: "NONE",
   sequence: 0,
+  patrolActive: false,
 };
 
 afterEach(() => {
@@ -140,6 +141,45 @@ describe("API client", () => {
     expect(error).toMatchObject({ code: "INVALID_RESPONSE" });
   });
 
+  it("200 但响应体为空对象时抛出 INVALID_RESPONSE", async () => {
+    const mock = vi.fn().mockResolvedValue(
+      new Response("{}", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    const error = await fetchRobot().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+
+  it("200 但缺少必要字段（无 position）时抛出 INVALID_RESPONSE", async () => {
+    const mock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ ...robotJson, position: undefined }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    const error = await fetchRobot().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+
+  it("200 但字段类型错误（position 为字符串）时抛出 INVALID_RESPONSE", async () => {
+    const mock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ ...robotJson, position: "not-a-position" }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    const error = await fetchRobot().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+
   it("fetchPerceptionLatest 请求正确路径", async () => {
     const mock = vi.fn().mockResolvedValue(
       new Response(
@@ -185,5 +225,55 @@ describe("API client", () => {
       "/api/v1/perception/events?after=3&limit=50",
       expect.objectContaining({ signal: expect.anything() }),
     );
+  });
+
+  it("fetchPerceptionEvents 解析含真实事件的响应（不适用字段被省略）", async () => {
+    const mock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          instanceId: "i1",
+          events: [
+            {
+              eventId: 1,
+              instanceId: "i1",
+              sequence: 5,
+              type: "ANOMALY_DETECTED",
+              position: { x: 3, y: 4 },
+              // 异常事件：有 hazard、省略 contactResult（后端省略而非 null）。
+              hazard: {
+                hazardId: "smoke-01",
+                hazardType: "SMOKE",
+                severity: "HIGH",
+                label: null,
+                position: { x: 3, y: 4 },
+                distanceCells: 1,
+              },
+            },
+            {
+              eventId: 2,
+              instanceId: "i1",
+              sequence: 5,
+              type: "CONTACT_BOUNDARY",
+              position: { x: 0, y: 0 },
+              // 接触事件：有 contactResult、省略 hazard。
+              contactResult: "BLOCKED_BOUNDARY",
+            },
+          ],
+          oldestEventId: 1,
+          latestEventId: 2,
+          hasMore: false,
+          truncated: false,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    const view = await fetchPerceptionEvents(0, 50);
+    expect(view.events).toHaveLength(2);
+    expect(view.events[0].hazard?.hazardType).toBe("SMOKE");
+    expect(view.events[0].contactResult).toBeUndefined();
+    expect(view.events[1].contactResult).toBe("BLOCKED_BOUNDARY");
+    expect(view.events[1].hazard).toBeUndefined();
   });
 });

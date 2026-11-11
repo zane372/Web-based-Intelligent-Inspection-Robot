@@ -9,6 +9,13 @@ import type {
   PerceptionLatest,
   RobotState,
 } from "../types";
+import {
+  isCommandResponse,
+  isMapInfo,
+  isPerceptionEvents,
+  isPerceptionLatest,
+  isRobotState,
+} from "./validate";
 
 const BASE_PATH = "/api/v1";
 const TIMEOUT_MS = 5000;
@@ -41,7 +48,11 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  validate?: (value: unknown) => value is T,
+): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -74,6 +85,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         `HTTP ${response.status} 响应体不是 JSON 对象`,
       );
     }
+    // 字段级校验：畸形对象（{} / 缺字段 / 类型错误）在进入状态机前拦截，
+    // 避免 body as T 静默 cast 后在渲染层抛 TypeError。
+    if (validate && !validate(body)) {
+      throw new ApiError(
+        "INVALID_RESPONSE",
+        `HTTP ${response.status} 响应体字段缺失或类型错误`,
+      );
+    }
     return body as T;
   } finally {
     clearTimeout(timer);
@@ -81,11 +100,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function fetchMap(): Promise<MapInfo> {
-  return request<MapInfo>("/map");
+  return request<MapInfo>("/map", undefined, isMapInfo);
 }
 
 export function fetchRobot(): Promise<RobotState> {
-  return request<RobotState>("/robot");
+  return request<RobotState>("/robot", undefined, isRobotState);
 }
 
 export function sendCommand(
@@ -93,15 +112,23 @@ export function sendCommand(
   direction?: Heading,
 ): Promise<CommandResponse> {
   const payload = direction ? { type, direction } : { type };
-  return request<CommandResponse>("/robot/commands", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  return request<CommandResponse>(
+    "/robot/commands",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    isCommandResponse,
+  );
 }
 
 export function fetchPerceptionLatest(): Promise<PerceptionLatest> {
-  return request<PerceptionLatest>("/perception/latest");
+  return request<PerceptionLatest>(
+    "/perception/latest",
+    undefined,
+    isPerceptionLatest,
+  );
 }
 
 export function fetchPerceptionEvents(
@@ -110,5 +137,7 @@ export function fetchPerceptionEvents(
 ): Promise<PerceptionEvents> {
   return request<PerceptionEvents>(
     `/perception/events?after=${after}&limit=${limit}`,
+    undefined,
+    isPerceptionEvents,
   );
 }
