@@ -81,18 +81,22 @@ jobs:
       - name: 构建镜像
         run: docker build -t "$IMAGE:sha-${{ steps.verify.outputs.sha }}" .
 
-      - name: 推送前冒烟（生产等价入口：健康 + 首页，SPEC 9.5）
+      - name: 推送前冒烟（用刚构建的镜像，生产等价入口：健康 + 首页，SPEC 9.5）
         run: |
           set -euo pipefail
-          docker compose up --build -d
+          # 用「构建镜像」步骤刚产出的 $IMAGE:sha-$sha 标签镜像冒烟，而非 docker compose
+          # up --build 从源码重建（那样测的是 patrol-sim-base:local，不是将要推送的镜像）。
+          # digest 需 push 之后才可取得，故冒烟用不可变 sha 标签；生产部署改用 digest。
+          export APP_IMAGE="$IMAGE:sha-${{ steps.verify.outputs.sha }}"
+          docker compose -f deploy/compose.yaml up -d
           ok=0
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/api/v1/health > /dev/null; then ok=1; break; fi
             sleep 2
           done
-          if [ "$ok" != "1" ]; then echo "container did not become healthy"; docker compose down; exit 1; fi
+          if [ "$ok" != "1" ]; then echo "container did not become healthy"; docker compose -f deploy/compose.yaml down; exit 1; fi
           curl -fsS http://127.0.0.1:8080/ > /dev/null
-          docker compose down
+          docker compose -f deploy/compose.yaml down
 
       - name: 推送并记录 digest
         id: push
