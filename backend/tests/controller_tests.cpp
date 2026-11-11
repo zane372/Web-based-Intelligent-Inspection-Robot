@@ -130,9 +130,13 @@ TEST(RobotControllerTest, PatrolCompletesAutomatically) {
     controller.execute(CommandType::StartPatrol, Direction::Right);
 
     // 3x3 无障碍共 9 格，起点已访问，需 8 步遍历完毕。
-    for (int i = 0; i < 8; ++i) {
+    // 前 7 步仍在巡检中（返回 true），第 8 步推进后完成（返回 false），
+    // 使后台线程在锁外通知观察者后立即退出（审查 M-1：避免旧线程被并发
+    // StartPatrol 重新唤醒）。
+    for (int i = 0; i < 7; ++i) {
         ASSERT_TRUE(controller.patrolStep()) << "第 " << i << " 步仍应在巡检中";
     }
+    EXPECT_FALSE(controller.patrolStep()) << "最后一步推进后应返回 false";
     const RobotSnapshot snap = controller.snapshot();
     EXPECT_FALSE(snap.patrolActive);
     EXPECT_EQ(snap.lastResult, LastResult::PatrolCompleted);

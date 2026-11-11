@@ -108,15 +108,22 @@ bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
     ++patrolIndex_;
     robot.applyManualMove(dir, grid);
     ++sequence;
-    if (patrolIndex_ >= patrolPath_.size()) {
-        // 最后一步执行完毕：标记完成，但仍返回 true 表示本步已推进。
+    const bool completed = patrolIndex_ >= patrolPath_.size();
+    if (completed) {
+        // 最后一步执行完毕：标记完成并返回 false，使 loop 在锁外通知观察者后
+        // 立即 break 退出。若此处返回 true，loop 会重新加锁并再次进入
+        // while(active_)，形成「active_ 已置 false 但旧线程尚未退出」的窗口，
+        // 窗口内并发 StartPatrol 会把 active_ 重新置 true，导致旧线程与新线程
+        // 双线程同时推进同一巡检（sequence 翻倍、2 倍速、StartPatrol 响应被
+        // join 阻塞）。返回 false 后，loop 仍会先 onStep_(最终快照) 再 break，
+        // 最终步的观察通知不丢失。
         active_ = false;
         cv_.notify_all();
         robot.setMotionStatus(MotionStatus::Idle);
         robot.setLastResult(LastResult::PatrolCompleted);
     }
     stepSnapshot_ = buildSnapshotLocked(robot, sequence);
-    return true;
+    return !completed;
 }
 
 void PatrolExecutor::loop(std::mutex& mutex, Robot& robot, const Grid& grid,
