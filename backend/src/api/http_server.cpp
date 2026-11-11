@@ -432,14 +432,15 @@ void runHttpServer(const MapConfig& config,
             res.set_header("Allow", "GET, HEAD");
             return res;
         }
-        const bool head = (req.method == crow::HTTPMethod::HEAD);
         std::ifstream in(staticRoot + "/index.html", std::ios::binary);
         if (!in.is_open()) {
             return crow::response(404, "not found");
         }
         std::ostringstream buffer;
         buffer << in.rdbuf();
-        crow::response res(200, head ? std::string{} : buffer.str());
+        // GET/HEAD 均返回完整 body，HEAD 的响应体由 Crow 依据 skip_body 剥除，
+        // 使 Content-Length 保持为 index.html 的真实大小（而非 0）。
+        crow::response res(200, buffer.str());
         res.set_header("Content-Type", "text/html; charset=utf-8");
         return res;
     });
