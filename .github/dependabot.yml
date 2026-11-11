@@ -1,0 +1,13 @@
+# 依赖自动更新（与 Dockerfile 的基础镜像 digest pin 配套，避免 digest 长期滞留
+# 导致安全补丁缺失）：Dependabot 会定期开 PR 把 pinned digest 更新到最新。
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      time: "08:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
