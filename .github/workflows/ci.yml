@@ -29,7 +29,17 @@ jobs:
           persist-credentials: false
 
       - name: Install Boost, Asio and ccache
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libboost-system-dev libasio-dev ccache
+        # apt-get 偶发网络抖动（exit 100），加 3 次重试提升稳定性（SPEC 9.3.4）。
+        run: |
+          for i in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y --no-install-recommends libboost-system-dev libasio-dev ccache; then
+              exit 0
+            fi
+            echo "apt-get 失败（第 ${i} 次），10 秒后重试..."
+            sleep 10
+          done
+          echo "apt-get 重试 3 次仍失败"
+          exit 1
 
       - name: Cache ccache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
