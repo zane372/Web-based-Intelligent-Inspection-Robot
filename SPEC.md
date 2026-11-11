@@ -237,7 +237,8 @@ flowchart TB
 - `/` 和静态资源来自 `STATIC_ROOT`，容器内为 `/app/web`；API 前缀为 `/api/v1`。
 - `MAP_CONFIG` 默认为 `/app/config/map.json`；宿主机端口由 `HOST_PORT` 决定，默认 8080，且默认只绑定本机回环 `127.0.0.1`（避免无鉴权控制面暴露到局域网）。
 - 日志输出到 stdout／stderr；不安装数据库，不挂载状态卷，运行镜像不包含 Python、Node 依赖目录或编译工具链。
-- 容器使用 UID 10001 的非 root 用户，并设置 `no-new-privileges`。
+- 容器使用 UID 10001 的非 root 用户，并设置 `no-new-privileges`、`cap_drop: [ALL]`（丢弃全部 Linux capabilities）。
+- 容器加内存上限 256 MiB（`deploy.resources.limits.memory`），与只读根文件系统、`/tmp` tmpfs 一起构成运行时的资源/隔离兜底；请求体缓冲已在解析层封顶 4096，此处为防御纵深的第二道闸。
 - 健康检查为 `GET /api/v1/health`；停止使用 `docker compose down`，内存状态随进程结束而丢弃。
 
 ---
@@ -898,7 +899,7 @@ detected = distance <= hazardRangeCells
 | 可维护性 | Domain 不依赖 HTTP；API DTO 与领域类型分离；新规则有独立纯函数测试 | Code Review、CMake 依赖检查 |
 | 浏览器 | 至少一个 Chromium 完整验收，Firefox 做地图、四方向、阻挡、巡检和重置冒烟 | 当前为验收要求，不宣称已有自动化 E2E |
 | 可访问性 | 原生按钮、键盘焦点、文本反馈、非纯颜色提示、窄屏可操作 | 页面走查和截图 |
-| 容器安全 | 非 root、no-new-privileges、精简运行镜像、限制请求体、不泄露堆栈 | 配置审查与异常请求 |
+| 容器安全 | 非 root、no-new-privileges、cap_drop ALL、内存上限 256 MiB、只读根文件系统、精简运行镜像、限制请求体、不泄露堆栈 | 配置审查与异常请求 |
 | 供应链 | lockfile／固定 release；CD 使用不可变镜像摘要；Actions 最小权限，发布／部署步骤固定到经批准的 Action 版本或提交 | 当前部分具备，CD 阶段补齐 |
 | 秘密管理 | 不提交 `.env`、令牌或私钥；部署秘密只放 GitHub Environments／Secrets，不写进镜像和日志 | 所有阶段检查 |
 | 公网边界 | 当前无用户鉴权；不得把任意人可操控的机器人接口误称为生产级安全系统 | 默认仅监听本机回环 `127.0.0.1`；对外暴露需显式 `APP_HOST=0.0.0.0` 并置于带鉴权的反向代理后，且由反代限制请求体大小 |
@@ -1060,7 +1061,7 @@ flowchart LR
 
 `latest` 或 `main` 等可变标签不得作为生产部署和回滚依据。CD 在推送前以生产等价入口启动镜像，运行健康检查、Python 冒烟和静态首页检查；推送后记录 digest，后续部署不再执行不同构建。
 
-`deploy/compose.yaml` 通过 `APP_IMAGE` 接收完整 `image@digest`，保留当前非 root、健康检查、端口和只读地图配置要求。运行主机无需克隆整个源码仓库，只需受审的部署配置和镜像拉取权限。
+`deploy/compose.yaml` 通过 `APP_IMAGE` 接收完整 `image@digest`，保留当前非 root、no-new-privileges、cap_drop ALL、内存上限 256 MiB、只读根文件系统 + /tmp tmpfs、健康检查、端口回环映射和只读地图配置要求。运行主机无需克隆整个源码仓库，只需受审的部署配置和镜像拉取权限。
 
 ### 9.6 预发布、生产与回滚步骤
 
@@ -1173,7 +1174,8 @@ M1 可先完成支撑感知所需的模块边界，但不应扩张为全项目�
 - 安全加固边界：默认无用户鉴权、无应用层 TLS，对外服务必须由带鉴权的反向代理终结 TLS 并限制请求体大小（应用层 4096 字节上限是命令语义校验；构建时对 Crow 打了补丁，在解析层就把请求体缓冲封顶在 4096 字节，超出部分不再读入内存，反向代理层限制仍是公网部署的必需项）。
 - 计数器（`sequence`／`eventId`）为 32 位 `int`：按最速 250 ms/步达 `INT_MAX` 约需 17 年，属理论隐患，暂不扩宽类型以避免扰动 JSON 契约。
 - 巡检规划（`cellsAdjacent` 两两配对）为 O(N²)，最坏约 10⁸ 次；地图尺寸由启动配置固定、规划已移出锁，不可被 HTTP 请求放大，暂不重写算法。
-- 第三方依赖（Crow／nlohmann/json／GoogleTest）在构建期用版本 tag（非浮动）从 GitHub 拉取、无 hash 校验；如需更严格供应链可 pin commit SHA + vendor（当前课程演示范围未实施）。
+- 第三方依赖（Crow／nlohmann/json／GoogleTest）在构建期从 GitHub 拉取，已固定到 tag 对应的 commit SHA（不可变）；如需更严格供应链可 vendor（当前课程演示范围未实施）。
+- 运行时镜像的 `apt-get install` 包（cmake/ninja-build/git/libboost-*/libasio-dev/curl 等）未固定到精确版本；基础镜像已固定到 manifest digest，且 Debian stable 仓库不可变，包版本随 point release 平移，属可接受的残余风险（构建仍可复现到「同一基础镜像 digest + 仓库快照」粒度）。
 - 前端依赖（esbuild/vite/vitest）均为构建期 devDependencies，无运行时 CVE 可利用面；esbuild 0.21.5 的 GHSA-67mh-4wv8-2f99 仅影响本地构建、vite 5.4.x 已含全部安全补丁（5.x 已 EOL）、vitest 2.1.9 已修复 CVE-2025-24964。
 
 ---
