@@ -2,7 +2,7 @@
 
 一套纯软件实现的二维机器人仿真系统。用户在浏览器中查看二维网格地图（含障碍物），通过「上、下、左、右」按钮逐格手动控制机器人，或一键开启自动巡检；后端校验命令并驱动虚拟机器人改变状态，再把位置、朝向、运行状态、巡检状态与命令结果返回前端。
 
-> 本仓库在 SPEC.md **基础版**之上，扩展了标准版的多项能力：**地图障碍物**（阻挡移动）、**自动巡检**（Boustrophedon 单元分解 + 贪心 BFS 组合策略覆盖遍历）与**虚拟感知**（三向测距、异常检测与事件、独立感知面板）。不包含真实传感器硬件、AI Agent 等更高阶能力。
+> 本仓库在 SPEC.md 的架构上，涵盖了Web界面/后端API、二维地图、手动控制与状态反馈、同时利用Git进行版本管理、实现了基础CI、以及利用docker进行部署。同时扩展构建了多项能力：**地图障碍物**（阻挡移动）、**自动巡检**（Boustrophedon 单元分解 + 贪心 BFS 组合策略覆盖遍历）与**虚拟感知**（三向测距、异常检测与事件、独立感知面板）。不包含真实传感器硬件、AI Agent 等更高阶能力。
 
 ## 功能特性
 
@@ -198,9 +198,9 @@ pytest tests/integration -q --base-url http://127.0.0.1:8080
 
 | 方向 | 主责模块 | 说明 |
 | --- | --- | --- |
-| 算法 | `backend/src/domain/`、`backend/tests/` 仿真单元测试 | 离散移动、边界/障碍规则、四方向增量、重置、Boustrophedon 单元分解 + 贪心 BFS 组合策略巡检规划 |
+| 算法 | `backend/src/domain/`、`backend/tests/` 仿真单元测试 | 离散移动、边界/障碍规则、四方向增量、重置、Boustrophedon 单元分解 + 贪心 BFS 组合策略巡检规划、Traefik 反向代理 |
 | 全栈 | `frontend/`、页面集成、根 README 与展示材料 | Canvas 绘制（含障碍物/异常图层）、API Client、UI 状态机、巡检按钮、感知面板、联调 |
-| 运维 | `Dockerfile`、`docker-compose.yml`、`traefik/`、`.dockerignore`、`.github/workflows/{ci,cd}.yml` | 多阶段构建、非 root、Traefik 反向代理、CI 三 job、CD（GHCR digest、Staging、生产审批/回滚） |
+| 运维 | `Dockerfile`、`docker-compose.yml`、`traefik/`、`.dockerignore`、`.github/workflows/{ci,cd}.yml` | 多阶段构建、非 root、CI 三 job、CD（GHCR digest、Staging、生产审批/回滚） |
 | 嵌入式（虚拟设备软件） | `backend/src/api/`、`backend/src/control/`、`backend/src/perception/`、`main.cpp`、配置加载 | API 契约、严格校验、序列号、巡检线程控制（PatrolExecutor）、虚拟感知服务、静态托管 |
 | 人工智能（质量保障） | `tests/integration/`、验收矩阵、测试报告 | pytest 黑盒测试、健康等待、错误路径覆盖、感知契约 |
 
