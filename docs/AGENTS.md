@@ -1,4 +1,4 @@
-# 编程 Agent 工作规范(注意全程按照spec.md来实现)
+# 编程 Agent 工作规范
 开始任务前读取本文件和 request.md以及spec.md。不同工具的规则文件加载方式不同；未自动加载本文件的工具，需要在任务提示词中显式引用。
 遵守运行工具的上层指令与约束。用户当前明确指令优先于本文件中的项目约定；已有授权继续有效，不重复索要确认。
 
@@ -26,7 +26,6 @@
 - 采用c/c++进行编写，python也可以，如果实在需要也可以引进其他语言设定
 - 全程按照SPEC.md（项目策划属来执行）
 - 此项目的github的仓库为[zane372/Web-based-Intelligent-Inspection-Robot: 基于 Web 的智能巡检机器人二维仿真系统](https://github.com/zane372/Web-based-Intelligent-Inspection-Robot)
-- 如需要添加其余的skill进行操作实现允许添加skill
 - 项目模板仓库为 https://github.com/Yhimhas/patrol-sim 仓库 docs/ 中的需求、分工、架构和运行说明是参考材料。大家可以自行安排文件名、章节和表格，也可以合并成一份文档，只要把实际功能、运行方式、项目架构和成员贡献写清楚即可。
 ## 4. Git 分支与提交
 ### 4.1 合理使用分支
