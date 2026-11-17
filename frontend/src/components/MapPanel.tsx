@@ -99,20 +99,22 @@ export function MapPanel({
   return (
     <section
       aria-label="地图区"
-      className={`flex min-w-0 flex-col items-center gap-4 ${className ?? ""}`}
+      className={`flex h-full min-h-0 min-w-0 flex-col gap-3 ${className ?? ""}`}
     >
       <h2 className="sr-only">地图</h2>
-      <div className={`map-frame ${blocked ? "is-blocked" : ""}`}>
-        <canvas
-          ref={canvasRef}
-          role="img"
-          aria-label={mapSummary}
-          className="block h-full w-full"
-        />
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <div className={`map-frame ${blocked ? "is-blocked" : ""}`}>
+          <canvas
+            ref={canvasRef}
+            role="img"
+            aria-label={mapSummary}
+            className="block h-full w-full"
+          />
+        </div>
       </div>
 
-      {/* 符号图例 + 比例尺 + 地图信息，与地图同宽居中。 */}
-      <div className="map-legend flex w-full max-w-[calc(100vh-250px)] flex-col gap-3">
+      {/* 符号图例 + 比例尺 + 地图信息，铺满列宽置于底部。 */}
+      <div className="map-legend flex w-full shrink-0 flex-col gap-2.5">
         <h3 className="control-label m-0">符号图例</h3>
         <ul
           className="m-0 flex list-none flex-wrap items-center gap-x-6 gap-y-2 pl-0"

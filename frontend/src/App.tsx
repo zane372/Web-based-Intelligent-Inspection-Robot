@@ -93,9 +93,9 @@ export default function App() {
   }, [move, togglePatrol]);
 
   return (
-    <main className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-10 py-8 max-[800px]:gap-4 max-[800px]:px-4 max-[800px]:py-5">
+    <main className="mx-auto flex h-screen w-full max-w-[2000px] flex-col gap-4 overflow-hidden px-5 py-4 max-[1100px]:h-auto max-[1100px]:min-h-screen max-[1100px]:overflow-visible">
       <StatusBar state={state} />
-      <div className="grid grid-cols-[minmax(0,1fr)_380px] items-start gap-8 max-[1100px]:grid-cols-1 max-[1100px]:gap-6">
+      <div className="grid min-h-0 flex-1 grid-rows-1 grid-cols-[minmax(0,1fr)_minmax(290px,350px)_minmax(320px,410px)] items-stretch gap-4 max-[1100px]:grid-rows-none max-[1100px]:grid-cols-1 max-[1100px]:flex-none max-[1100px]:gap-4">
         <MapPanel
           map={state.map}
           robot={state.robot}
@@ -103,16 +103,14 @@ export default function App() {
           discovered={perception.discovered}
           visited={visited}
         />
-        <div className="flex flex-col gap-6">
-          <ControlPanel
-            state={state}
-            onMove={move}
-            onReset={reset}
-            onTogglePatrol={togglePatrol}
-            onReconnect={reconnect}
-          />
-          <PerceptionPanel state={perception} />
-        </div>
+        <ControlPanel
+          state={state}
+          onMove={move}
+          onReset={reset}
+          onTogglePatrol={togglePatrol}
+          onReconnect={reconnect}
+        />
+        <PerceptionPanel state={perception} />
       </div>
     </main>
   );

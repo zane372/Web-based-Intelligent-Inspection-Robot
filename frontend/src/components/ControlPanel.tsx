@@ -83,10 +83,10 @@ export function ControlPanel({
   ];
 
   return (
-    <aside aria-label="控制区" className="flex flex-col gap-5">
-      <div className="panel flex flex-col gap-3 p-5">
+    <aside aria-label="控制区" className="flex h-full flex-col gap-3 overflow-y-auto">
+      <div className="panel flex flex-col gap-2.5 p-4">
         <h2 className="m-0 text-base font-bold text-ink">运行读数</h2>
-        <dl className="m-0 flex flex-col gap-2.5 text-sm">
+        <dl className="m-0 flex flex-col gap-2 text-sm">
           {readout.map((r) => (
             <div key={r.label} className="readout-row">
               <dt className="text-ink-muted">{r.label}</dt>
@@ -96,9 +96,9 @@ export function ControlPanel({
         </dl>
       </div>
 
-      <div className="panel flex flex-col items-center gap-4 p-5">
+      <div className="panel flex flex-col items-center gap-3 p-4">
         <h2 className="control-label m-0 self-start">方向控制</h2>
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-2.5">
           <DirButton
             label="向上移动"
             disabled={!canCommand}
@@ -106,7 +106,7 @@ export function ControlPanel({
           >
             <ArrowUp />
           </DirButton>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <DirButton
               label="向左移动"
               disabled={!canCommand}
@@ -189,9 +189,9 @@ export function ControlPanel({
         </button>
       )}
 
-      <section className="panel p-5 text-sm" aria-label="使用帮助">
-        <h2 className="control-label mb-2.5">使用帮助</h2>
-        <ul className="m-0 list-disc space-y-1.5 pl-5 leading-relaxed text-ink-soft">
+      <details className="panel shrink-0 p-4 text-sm">
+        <summary className="control-label cursor-pointer list-none select-none">使用帮助</summary>
+        <ul className="m-0 mt-2 list-disc space-y-1 pl-5 leading-relaxed text-ink-soft">
           <li>每次移动一格。</li>
           <li>越界不会离开地图，机器人停在原地。</li>
           <li>绿色格子为密林障碍，机器人无法进入。</li>
@@ -199,7 +199,7 @@ export function ControlPanel({
           <li>方向键 / WASD 移动，空格切换巡检。</li>
           <li>坐标原点 (0,0) 位于左上角。</li>
         </ul>
-      </section>
+      </details>
     </aside>
   );
 }
