@@ -26,6 +26,13 @@ export interface Position {
   y: number;
 }
 
+/** 已走轨迹点：坐标 + 到达时刻（performance.now 时间戳），供轨迹按时间淡出。 */
+export interface TrailPoint {
+  x: number;
+  y: number;
+  at: number;
+}
+
 export interface MapInfo {
   mapId: string;
   width: number;

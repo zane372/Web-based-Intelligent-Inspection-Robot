@@ -3,7 +3,7 @@
 // 不依赖 DOM 格子；坐标换算 pixelX = (x + 0.5) * cellSize。
 import { severityColor } from "../format";
 import { palette } from "../theme";
-import type { Detection, Heading, MapInfo, Position, RobotState } from "../types";
+import type { Detection, Heading, MapInfo, RobotState, TrailPoint } from "../types";
 
 export const DEFAULT_CELL_SIZE = 32;
 
@@ -154,60 +154,61 @@ function drawNorthArrow(
 }
 
 // 紫色航线：已走轨迹的「彗尾 + 粒子」效果（签名动效）。
-// 彗尾轨迹：只保留最近 MAX_TRAIL 格；头（最新/机器人处）亮、尾快速淡出消失。
-const MAX_TRAIL = 4;
+// 彗尾轨迹：按时间存活——每个轨迹点带到达时刻 at，超过 TRAIL_TTL 自动淡出，
+// 因此机器人停下后轨迹会在 ~0.8s 内消失；头部（机器人最新位置）粗而亮、尾部细而淡，带柔光。
+const TRAIL_TTL = 800;
 
 function drawCourse(
   ctx: CanvasRenderingContext2D,
-  visited: Position[],
+  trail: TrailPoint[],
   cellSize: number,
   now = 0,
 ): void {
-  if (visited.length < 2) {
+  // 只保留仍在寿命内的点（now 来自 requestAnimationFrame，与 at 同钟）。
+  const alive = trail.filter((p) => now - p.at <= TRAIL_TTL);
+  if (alive.length < 2) {
     return;
   }
-  // 数组尾 = 最新（机器人位置），数组头 = 最旧。只取最近 MAX_TRAIL 格。
-  const trail =
-    visited.length <= MAX_TRAIL
-      ? visited
-      : visited.slice(visited.length - MAX_TRAIL);
-  const m = trail.length;
-  const pts = trail.map((p) => cellCenter(p, cellSize));
+  const m = alive.length;
+  const pts = alive.map((p) => cellCenter(p, cellSize));
 
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.strokeStyle = palette.course;
+  ctx.shadowColor = palette.course;
 
-  // 1) 逐段连线：越靠近机器人越实越粗，越往尾部越细越淡（平方衰减）→ 尾巴快速消失。
+  // 1) 逐段连线：越靠近机器人越粗越亮，越往尾越细越淡（随年龄平方衰减）。
   for (let i = 0; i < m - 1; i++) {
-    const t = (i + 1) / (m - 1); // 该段较新端点在 0(最旧)→1(最新) 的位置
-    const a = t * t;
-    if (a < 0.06) continue;
-    ctx.lineWidth = Math.max(1.5, cellSize * 0.09 * t);
-    ctx.globalAlpha = 0.55 * a;
+    const age = Math.max(0, now - alive[i + 1].at) / TRAIL_TTL; // 段头（较新端点）年龄 0→1
+    const a = 1 - age;
+    const alpha = a * a * 0.85;
+    if (alpha < 0.02) {
+      continue;
+    }
+    ctx.lineWidth = Math.max(1, cellSize * (0.04 + 0.13 * a));
+    ctx.globalAlpha = alpha;
+    // 只在靠近头部的段加柔光，尾部不加，避免整条糊成一片。
+    ctx.shadowBlur = a > 0.6 ? cellSize * 0.28 * a : 0;
     ctx.beginPath();
     ctx.moveTo(pts[i].x, pts[i].y);
     ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
     ctx.stroke();
   }
 
-  // 2) 粒子点：头（最新）亮而实，越往尾越小越淡；极轻微呼吸，营造流动感。
-  for (let i = 0; i < m; i++) {
-    const t = i / (m - 1); // 0=最旧 → 1=最新
-    const a = t * t;
-    if (a < 0.04) continue;
-    const pulse = 0.88 + 0.12 * Math.sin(now * 0.006 - i * 1.2);
-    const r = cellSize * (0.02 + 0.09 * t);
+  // 2) 头部亮核：机器人最新位置上一颗小而实的发光点。
+  const head = alive[m - 1];
+  const headAge = Math.max(0, now - head.at) / TRAIL_TTL;
+  const headA = 1 - headAge;
+  ctx.globalAlpha = 0.9 * headA * headA;
+  ctx.shadowBlur = cellSize * 0.5 * headA;
+  ctx.fillStyle = palette.course;
+  ctx.beginPath();
+  ctx.arc(pts[m - 1].x, pts[m - 1].y, cellSize * 0.11, 0, Math.PI * 2);
+  ctx.fill();
 
-    ctx.fillStyle = palette.course;
-    ctx.globalAlpha = Math.min(1, a * pulse);
-    ctx.beginPath();
-    ctx.arc(pts[i].x, pts[i].y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // 复位透明度，避免影响后续绘制（机器人/感知层）。
+  // 复位透明度与阴影，避免影响后续绘制（机器人/感知层）。
   ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
 }
 
 // 地形质感：确定性 per-cell 染色（约 12% 格略绿/略暖），
@@ -236,7 +237,7 @@ export function draw(
   map: MapInfo,
   robot: RobotState | null,
   cellSize: number,
-  visited?: Position[],
+  visited?: TrailPoint[],
   now = 0,
 ): void {
   const width = map.width * cellSize;

@@ -9,7 +9,7 @@ import {
 import { headingLabel } from "../format";
 import type { UiState } from "../state";
 import { palette } from "../theme";
-import type { Detection, MapInfo, Position, RobotState } from "../types";
+import type { Detection, MapInfo, RobotState, TrailPoint } from "../types";
 
 interface Props {
   className?: string;
@@ -17,7 +17,7 @@ interface Props {
   robot: RobotState | null;
   ui: UiState;
   discovered: Detection[];
-  visited: Position[];
+  visited: TrailPoint[];
 }
 
 function LegendItem({ swatch, label }: { swatch: ReactNode; label: string }) {

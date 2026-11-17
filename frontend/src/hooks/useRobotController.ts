@@ -6,7 +6,7 @@ import { fetchMap, fetchRobot, sendCommand } from "../api/client";
 import type { AppEvent, AppState } from "../state";
 import type { CommandType, Heading } from "../types";
 
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 250;
 const BOUNDARY_FEEDBACK_MS = 1500;
 const PATROL_ALERT_MS = 1500;
 const LOAD_RETRY_COUNT = 3;
