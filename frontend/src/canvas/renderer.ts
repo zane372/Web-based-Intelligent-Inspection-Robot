@@ -154,8 +154,8 @@ function drawNorthArrow(
 }
 
 // 紫色航线：已走轨迹的「彗尾 + 粒子」效果（签名动效）。
-// 只保留最近 MAX_TRAIL 格，旧轨迹随机器人移动自然淡出消失；粒子带呼吸脉冲（动态）。
-const MAX_TRAIL = 8;
+// 彗尾轨迹：只保留最近 MAX_TRAIL 格；头（最新/机器人处）亮、尾快速淡出消失。
+const MAX_TRAIL = 4;
 
 function drawCourse(
   ctx: CanvasRenderingContext2D,
@@ -166,7 +166,7 @@ function drawCourse(
   if (visited.length < 2) {
     return;
   }
-  // 尾巴 = 最近 MAX_TRAIL 格；head = 最新位置（数组尾），tail = 最旧位置（数组头）。
+  // 数组尾 = 最新（机器人位置），数组头 = 最旧。只取最近 MAX_TRAIL 格。
   const trail =
     visited.length <= MAX_TRAIL
       ? visited
@@ -174,35 +174,33 @@ function drawCourse(
   const m = trail.length;
   const pts = trail.map((p) => cellCenter(p, cellSize));
 
-  // 1) 细而淡的连线（彗尾脊柱）：圆角 + 低透明度，弱化折线的硬直角。
-  ctx.strokeStyle = palette.course;
-  ctx.lineWidth = Math.max(2, cellSize * 0.06);
-  ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  ctx.globalAlpha = 0.3;
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < m; i++) {
-    ctx.lineTo(pts[i].x, pts[i].y);
-  }
-  ctx.stroke();
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = palette.course;
 
-  // 2) 粒子：每个轨迹格一个发光圆点（外光晕 + 亮核），头亮尾淡、头大尾小，呼吸脉冲。
-  for (let i = 0; i < m; i++) {
-    const a = (m - 1 - i) / (m - 1); // 1=最新(头) → 0=最旧(尾)
-    const pulse = 0.7 + 0.3 * Math.sin(now * 0.005 - i * 0.9);
-    const alpha = Math.max(0.05, (0.08 + 0.92 * a) * pulse);
-    const r = cellSize * (0.045 + 0.105 * a);
-
-    // 外光晕：大而淡，营造柔光。
-    ctx.fillStyle = palette.course;
-    ctx.globalAlpha = alpha * 0.35;
+  // 1) 逐段连线：越靠近机器人越实越粗，越往尾部越细越淡（平方衰减）→ 尾巴快速消失。
+  for (let i = 0; i < m - 1; i++) {
+    const t = (i + 1) / (m - 1); // 该段较新端点在 0(最旧)→1(最新) 的位置
+    const a = t * t;
+    if (a < 0.06) continue;
+    ctx.lineWidth = Math.max(1.5, cellSize * 0.09 * t);
+    ctx.globalAlpha = 0.55 * a;
     ctx.beginPath();
-    ctx.arc(pts[i].x, pts[i].y, r * 2.2, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(pts[i].x, pts[i].y);
+    ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+    ctx.stroke();
+  }
 
-    // 亮核：小而实。
-    ctx.globalAlpha = Math.min(1, alpha);
+  // 2) 粒子点：头（最新）亮而实，越往尾越小越淡；极轻微呼吸，营造流动感。
+  for (let i = 0; i < m; i++) {
+    const t = i / (m - 1); // 0=最旧 → 1=最新
+    const a = t * t;
+    if (a < 0.04) continue;
+    const pulse = 0.88 + 0.12 * Math.sin(now * 0.006 - i * 1.2);
+    const r = cellSize * (0.02 + 0.09 * t);
+
+    ctx.fillStyle = palette.course;
+    ctx.globalAlpha = Math.min(1, a * pulse);
     ctx.beginPath();
     ctx.arc(pts[i].x, pts[i].y, r, 0, Math.PI * 2);
     ctx.fill();
