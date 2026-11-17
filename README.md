@@ -25,7 +25,7 @@
 | 后端 | C++20（GCC 12+）、Crow（HTTP）、nlohmann/json 3.11.x |
 | 仿真核心 | 纯 C++（`domain/`、`control/`、`perception/`，不依赖 Crow／JSON／Canvas） |
 | 构建 | CMake 3.24+、Ninja、GoogleTest + CTest |
-| 前端 | React 18、TypeScript 5.x、Vite、Tailwind CSS 4、Canvas 2D、Vitest、ESLint |
+| 前端 | React 19、TypeScript 5.x、Vite、Tailwind CSS 4、Canvas 2D、Vitest、ESLint |
 | 集成测试 | Python 3.12、pytest 8.x、requests 2.32.x |
 | 交付 | Docker Compose v2、Traefik v3（反向代理）、GitHub Actions |
 

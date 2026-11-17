@@ -116,7 +116,7 @@
 | 后端 | C++20、GCC 12+、Crow 1.2.0、Boost.System／Asio | HTTP、控制与仿真。 |
 | JSON | nlohmann/json 3.11.3 | 请求、响应和配置解析。 |
 | 构建与测试 | CMake 3.24+、CTest、GoogleTest 1.15.2 | 编译、依赖和 C++ 单元测试。 |
-| 前端 | React 18、TypeScript 5.x、Vite、Tailwind CSS 4、Canvas 2D | 页面、状态和网格渲染。 |
+| 前端 | React 19、TypeScript 5.x、Vite、Tailwind CSS 4、Canvas 2D | 页面、状态和网格渲染。 |
 | 前端质量 | ESLint、TypeScript `tsc --noEmit`、Vitest | 静态检查和纯函数测试。 |
 | 集成测试 | Python 3.12、pytest、requests | 对真实 HTTP 服务做黑盒验证。 |
 | 交付 | Node.js 22、Docker、Compose v2、GitHub Actions | 构建、单容器运行和 CI。 |
