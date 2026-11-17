@@ -6,33 +6,34 @@
   --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas,
     "Courier New", monospace;
 
-  /* 工业现场 · 冷灰蓝中性底 */
-  --color-paper: #eceff3;
-  --color-surface: #ffffff;
-  --color-surface-soft: #f5f7f9;
-  --color-line: #dbe1e8;
-  --color-line-strong: #c3ccd6;
+  /* 定向越野 · 暖纸底（非纯白） */
+  --color-paper: #e7e2d1;
+  --color-surface: #fbf9f2;
+  --color-surface-soft: #f1ede0;
+  --color-line: #d6cfb8;
+  --color-line-strong: #b3a98d;
 
-  /* 墨色：从现场工装的黑蓝色相调（非纯黑/纯灰） */
-  --color-ink: #1b2531;
-  --color-ink-soft: #455167;
-  --color-ink-muted: #5b6b82; /* 次级文字：对浅底 ≥4.5:1 */
-  --color-ink-faint: #a7b0bd; /* 仅装饰，不承载信息 */
+  /* 墨色：暖黑绿（像油墨，非纯黑/纯灰） */
+  --color-ink: #23301f;
+  --color-ink-soft: #4a5644;
+  --color-ink-muted: #55614b; /* 次级文字：对暖纸 ≥4.5:1 */
+  --color-ink-faint: #9aa390; /* 仅装饰，不承载信息 */
 
-  /* 安全信号色 */
-  --color-safety: #b45309; /* 主 accent：安全琥珀（深，保证对比度） */
-  --color-safety-strong: #92400e;
-  --color-hazard: #e2a50c; /* 警戒黄（警戒带） */
-  --color-signal: #1a7f3d; /* 信号绿 */
+  /* 航线紫：定向越野课程色（签名 accent） */
+  --color-course: #7c3aed;
+  --color-course-strong: #5b21b6;
+
+  /* 状态信号色 */
+  --color-signal: #1a7f3d; /* 绿：就绪/巡检中 */
   --color-signal-strong: #11612e;
-  --color-danger: #bd2a22; /* 信号红（严重度 HIGH） */
-  --color-caution: #d97706; /* 中危橙（严重度 LOW） */
-  --color-caution-deep: #ea580c; /* 深橙（严重度 MEDIUM） */
+  --color-danger: #b91c1c; /* 红：阻断/危险（严重度 HIGH） */
+  --color-caution: #b45309; /* 琥珀：降级（严重度 LOW） */
 
-  /* 地图画布专用（与 canvas/renderer.ts 常量一致） */
-  --color-field: #f2f5f7; /* 现场浅底 */
-  --color-grid: #d9e0e7; /* 网格细线 */
-  --color-obstacle: #26303c; /* 障碍深炭 */
+  /* 地图地形（与 src/theme.ts 的 palette 一致，供 canvas/图例复用） */
+  --color-field: #f6f8f0; /* 可通行地形 */
+  --color-grid: #cfc6ac; /* 等高线 */
+  --color-obstacle: #3c5a3f; /* 密林绿（障碍） */
+  --color-boundary: #3a2e1f; /* 深土边界 */
 }
 
 /* ---- 基础 ---- */
@@ -44,17 +45,35 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* 非单一白：暖纸底 + 航线紫/地形绿/琥珀光晕，营造"户外地图"氛围。 */
+  background:
+    radial-gradient(
+      1100px 560px at 82% -8%,
+      color-mix(in srgb, var(--color-course) 14%, transparent),
+      transparent 64%
+    ),
+    radial-gradient(
+      1000px 680px at -8% 108%,
+      color-mix(in srgb, var(--color-signal) 11%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      720px 420px at 50% 118%,
+      color-mix(in srgb, var(--color-caution) 6%, transparent),
+      transparent 60%
+    ),
+    var(--color-paper);
+  background-attachment: fixed;
 }
 
 /* 浏览器面从调色板定制：文本选择、滚动条、焦点环。 */
 ::selection {
-  background: var(--color-hazard);
-  color: var(--color-ink);
+  background: var(--color-course);
+  color: #ffffff;
 }
 
 * {
@@ -75,19 +94,19 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-safety);
+  outline: 2px solid var(--color-course);
   outline-offset: 2px;
 }
 
 /* ---- 签名组件 ---- */
 
-/* 警戒带：黄黑斜纹（本世界的视觉签名）。 */
-.hazard-tape {
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--color-ink) 0 14px,
-    var(--color-hazard) 14px 28px
-  );
+/* 航线标记：标题前的小紫条，像地图上画的课程线。 */
+.course-mark {
+  width: 8px;
+  height: 28px;
+  border-radius: 2px;
+  background: var(--color-course);
+  flex: 0 0 auto;
 }
 
 /* 信号灯：带柔边光晕的指示灯。 */
@@ -140,9 +159,9 @@ body {
   font-weight: 600;
 }
 
-/* 安全标签：小字、加宽字距（现场标牌风格）。 */
-.hazard-label {
-  font-size: 11px;
+/* 控制点标签：小字、加宽字距（地图控制点编号风格）。 */
+.control-label {
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -162,7 +181,7 @@ body {
   background: var(--color-surface);
   border: 1px solid var(--color-line);
   border-radius: 14px;
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--color-ink) 6%, transparent);
+  box-shadow: 0 2px 14px color-mix(in srgb, var(--color-ink) 7%, transparent);
 }
 
 /* 读出行。 */
@@ -176,7 +195,7 @@ body {
   border-radius: 10px;
 }
 
-/* 地图框：警戒边界。 */
+/* 地图框：像摊开的定向越野地图。 */
 .map-frame {
   border: 1px solid var(--color-line-strong);
   border-radius: 14px;
@@ -198,10 +217,19 @@ body {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 0%, transparent),
       0 6px 24px color-mix(in srgb, var(--color-ink) 10%, transparent);
   }
-  50% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-danger) 55%, transparent),
+  60% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-danger) 50%, transparent),
+      0 0 0 14px color-mix(in srgb, var(--color-danger) 14%, transparent),
       0 6px 24px color-mix(in srgb, var(--color-ink) 10%, transparent);
   }
+}
+
+/* 符号图例：像地图边缘的图例表。 */
+.map-legend {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  padding: 14px 16px;
 }
 
 /* ---- 控件 ---- */
@@ -228,8 +256,8 @@ button:disabled {
     border-color 0.15s ease, transform 0.05s ease;
 }
 .dir-btn:hover:not(:disabled) {
-  background: var(--color-safety);
-  border-color: var(--color-safety);
+  background: var(--color-course);
+  border-color: var(--color-course);
   color: #ffffff;
 }
 .dir-btn:active:not(:disabled) {
@@ -262,19 +290,19 @@ button:disabled {
 }
 
 .patrol-btn {
-  background: var(--color-signal);
+  background: var(--color-course);
   color: #ffffff;
-  box-shadow: 0 3px 10px color-mix(in srgb, var(--color-signal) 30%, transparent);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--color-course) 30%, transparent);
 }
 .patrol-btn:hover:not(:disabled) {
-  background: var(--color-signal-strong);
+  background: var(--color-course-strong);
 }
 .patrol-btn.is-active {
-  background: var(--color-safety);
-  box-shadow: 0 3px 10px color-mix(in srgb, var(--color-safety) 30%, transparent);
+  background: var(--color-signal);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--color-signal) 30%, transparent);
 }
 .patrol-btn.is-active:hover:not(:disabled) {
-  background: var(--color-safety-strong);
+  background: var(--color-signal-strong);
 }
 
 .reconnect-btn {

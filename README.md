@@ -45,12 +45,12 @@
 │   └── tests/              # GoogleTest 单元测试
 ├── frontend/               # React 前端
 │   ├── src/main.tsx        # 入口
-│   ├── src/App.tsx         # 三栏布局 + 状态编排
+│   ├── src/App.tsx         # 两栏布局（左地图、右控制+感知）+ 状态编排
 │   ├── src/components/     # StatusBar、MapPanel、ControlPanel、PerceptionPanel、icons
 │   ├── src/hooks/          # useRobotController、usePerceptionController
 │   ├── src/api/client.ts   # 统一 API 客户端
 │   ├── src/canvas/renderer.ts
-│   ├── src/{state,perception_state,types,format}.ts
+│   ├── src/{state,perception_state,types,format,theme}.ts
 │   └── tests/              # Vitest 测试
 ├── config/map.json         # 地图与初始姿态配置
 ├── config/perception.json  # 虚拟感知配置（测距范围、异常半径、异常源初始位置，重置后随机）
