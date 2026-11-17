@@ -116,7 +116,7 @@
 | 后端 | C++20、GCC 12+、Crow 1.2.0、Boost.System／Asio | HTTP、控制与仿真。 |
 | JSON | nlohmann/json 3.11.3 | 请求、响应和配置解析。 |
 | 构建与测试 | CMake 3.24+、CTest、GoogleTest 1.15.2 | 编译、依赖和 C++ 单元测试。 |
-| 前端 | TypeScript 5.x、Vite 5、原生 HTML/CSS、Canvas 2D | 页面、状态和网格渲染。 |
+| 前端 | React 18、TypeScript 5.x、Vite、Tailwind CSS 4、Canvas 2D | 页面、状态和网格渲染。 |
 | 前端质量 | ESLint、TypeScript `tsc --noEmit`、Vitest | 静态检查和纯函数测试。 |
 | 集成测试 | Python 3.12、pytest、requests | 对真实 HTTP 服务做黑盒验证。 |
 | 交付 | Node.js 22、Docker、Compose v2、GitHub Actions | 构建、单容器运行和 CI。 |
@@ -453,7 +453,7 @@ flowchart TB
 
 ### 5.1 优化目标与原则
 
-当前分层已经具备基础，但控制器同时管理互斥、序列号、巡检路径和线程，HTTP 路由重复处理方法和错误，前端 `main.ts` 同时管理多种计时器。后续优化应解决这些具体复杂度，而不是重写系统。
+当前分层已经具备基础，但控制器同时管理互斥、序列号、巡检路径和线程，HTTP 路由重复处理方法和错误；前端曾由单一入口同时管理多种计时器（现已拆分为机器人/感知两个 controller hook）。后续优化应解决这些具体复杂度，而不是重写系统。
 
 目标：
 
