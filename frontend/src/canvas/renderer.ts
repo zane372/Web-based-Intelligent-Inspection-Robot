@@ -155,8 +155,8 @@ function drawNorthArrow(
 
 // 紫色航线：已走轨迹的「彗尾 + 粒子」效果（签名动效）。
 // 彗尾轨迹：按时间存活——每个轨迹点带到达时刻 at，超过 TRAIL_TTL 自动淡出，
-// 因此机器人停下后轨迹会在 ~0.8s 内消失；头部（机器人最新位置）粗而亮、尾部细而淡，带柔光。
-const TRAIL_TTL = 800;
+// 因此机器人停下后轨迹会在 ~1.2s 内消失；头部粗而亮、尾部细而淡（由粗到细的渐变光迹）。
+const TRAIL_TTL = 1200;
 
 function drawCourse(
   ctx: CanvasRenderingContext2D,
@@ -177,18 +177,18 @@ function drawCourse(
   ctx.strokeStyle = palette.course;
   ctx.shadowColor = palette.course;
 
-  // 1) 逐段连线：越靠近机器人越粗越亮，越往尾越细越淡（随年龄平方衰减）。
+  // 1) 逐段连线：越靠近机器人越粗越亮，越往尾越细越淡（由粗到细、由亮到淡的平滑渐变）。
   for (let i = 0; i < m - 1; i++) {
     const age = Math.max(0, now - alive[i + 1].at) / TRAIL_TTL; // 段头（较新端点）年龄 0→1
     const a = 1 - age;
-    const alpha = a * a * 0.85;
+    const alpha = Math.pow(a, 1.4) * 0.9;
     if (alpha < 0.02) {
       continue;
     }
-    ctx.lineWidth = Math.max(1, cellSize * (0.04 + 0.13 * a));
+    ctx.lineWidth = Math.max(0.8, cellSize * (0.02 + 0.22 * a));
     ctx.globalAlpha = alpha;
     // 只在靠近头部的段加柔光，尾部不加，避免整条糊成一片。
-    ctx.shadowBlur = a > 0.6 ? cellSize * 0.28 * a : 0;
+    ctx.shadowBlur = a > 0.5 ? cellSize * 0.32 * a : 0;
     ctx.beginPath();
     ctx.moveTo(pts[i].x, pts[i].y);
     ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
@@ -199,11 +199,11 @@ function drawCourse(
   const head = alive[m - 1];
   const headAge = Math.max(0, now - head.at) / TRAIL_TTL;
   const headA = 1 - headAge;
-  ctx.globalAlpha = 0.9 * headA * headA;
-  ctx.shadowBlur = cellSize * 0.5 * headA;
+  ctx.globalAlpha = 0.92 * Math.pow(headA, 1.4);
+  ctx.shadowBlur = cellSize * 0.55 * headA;
   ctx.fillStyle = palette.course;
   ctx.beginPath();
-  ctx.arc(pts[m - 1].x, pts[m - 1].y, cellSize * 0.11, 0, Math.PI * 2);
+  ctx.arc(pts[m - 1].x, pts[m - 1].y, cellSize * 0.12, 0, Math.PI * 2);
   ctx.fill();
 
   // 复位透明度与阴影，避免影响后续绘制（机器人/感知层）。
