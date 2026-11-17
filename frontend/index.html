@@ -3,73 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Web 智能巡检机器人二维网格地图仿真：手动控制与自动巡检，含障碍物检测与虚拟感知。"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231b2531'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%231a7f3d'/%3E%3C/svg%3E"
+    />
     <title>智能巡检机器人二维仿真</title>
   </head>
   <body>
-    <main id="app">
-      <header class="app-header">
-        <div class="header-title-row">
-          <h1>智能巡检机器人</h1>
-          <p id="status" role="status" aria-live="polite">加载中…</p>
-        </div>
-        <p class="header-subtitle">二维网格地图仿真 · 手动控制与自动巡检</p>
-      </header>
-      <div id="layout">
-        <section id="map-panel" aria-label="地图区">
-          <div id="map-container">
-            <canvas id="map-canvas" aria-label="机器人巡检地图"></canvas>
-          </div>
-        </section>
-        <aside id="side-panel" aria-label="控制区">
-          <dl id="readout">
-            <div class="readout-row"><dt>位置</dt><dd id="readout-position">—</dd></div>
-            <div class="readout-row"><dt>朝向</dt><dd id="readout-heading">—</dd></div>
-            <div class="readout-row"><dt>运行状态</dt><dd id="readout-motion-status">—</dd></div>
-            <div class="readout-row"><dt>最近结果</dt><dd id="readout-last-result">—</dd></div>
-            <div class="readout-row"><dt>序列号</dt><dd id="readout-sequence">—</dd></div>
-          </dl>
-          <div id="controls">
-            <button id="btn-up" class="dir-btn" aria-label="向上移动">↑</button>
-            <div id="controls-middle">
-              <button id="btn-left" class="dir-btn" aria-label="向左移动">←</button>
-              <button id="btn-reset" aria-label="重置位置">重置</button>
-              <button id="btn-right" class="dir-btn" aria-label="向右移动">→</button>
-            </div>
-            <button id="btn-down" class="dir-btn" aria-label="向下移动">↓</button>
-          </div>
-          <button id="btn-patrol" aria-label="自动巡检">自动巡检</button>
-          <button id="btn-reconnect" hidden>重新连接</button>
-          <section id="help" aria-label="使用帮助">
-            <h2>使用帮助</h2>
-            <ul>
-              <li>每次移动一格。</li>
-              <li>越界不会离开地图，机器人停在原地。</li>
-              <li>深色格子为障碍物，机器人无法进入。</li>
-              <li>「自动巡检」可让机器人自动遍历地图。</li>
-              <li>坐标原点位于左上角。</li>
-            </ul>
-          </section>
-        </aside>
-        <section id="perception-panel" aria-label="虚拟感知">
-          <h2>虚拟感知</h2>
-          <p id="perception-status" role="status" aria-live="polite">感知加载中…</p>
-          <div id="perception-ranges" aria-label="三向测距">
-            <div class="range-row"><span class="range-label">前</span><span id="range-front" class="range-value">—</span></div>
-            <div class="range-row"><span class="range-label">左</span><span id="range-left" class="range-value">—</span></div>
-            <div class="range-row"><span class="range-label">右</span><span id="range-right" class="range-value">—</span></div>
-          </div>
-          <div class="readout-row"><span class="range-label">观察序号</span><span id="perception-sequence" class="range-value">—</span></div>
-          <div id="perception-anomalies">
-            <h3>活动异常</h3>
-            <ul id="perception-anomaly-list" class="perception-list"></ul>
-          </div>
-          <div id="perception-events">
-            <h3>感知事件</h3>
-            <ul id="perception-event-list" class="perception-list" aria-live="polite"></ul>
-          </div>
-        </section>
-      </div>
-    </main>
-    <script type="module" src="/src/main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
