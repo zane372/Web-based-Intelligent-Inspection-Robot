@@ -99,7 +99,7 @@ export function MapPanel({
   return (
     <section
       aria-label="地图区"
-      className={`flex h-full min-h-0 min-w-0 flex-col gap-3 ${className ?? ""}`}
+      className={`flex h-full min-h-0 min-w-0 flex-col gap-5 ${className ?? ""}`}
     >
       <h2 className="sr-only">地图</h2>
       <div className="flex min-h-0 flex-1 items-center justify-center">
@@ -113,8 +113,8 @@ export function MapPanel({
         </div>
       </div>
 
-      {/* 符号图例 + 比例尺 + 地图信息，铺满列宽置于底部。 */}
-      <div className="map-legend flex w-full shrink-0 flex-col gap-2.5">
+      {/* 符号图例 + 比例尺 + 地图信息，与地图同宽居中（不铺满列宽，避免与地图错位）。 */}
+      <div className="map-legend mx-auto flex w-full max-w-[calc(100vh-200px)] shrink-0 flex-col gap-2.5">
         <h3 className="control-label m-0">符号图例</h3>
         <ul
           className="m-0 flex list-none flex-wrap items-center gap-x-6 gap-y-2 pl-0"
