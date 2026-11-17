@@ -23,9 +23,10 @@
 - 函数和命名应便于初学者追踪调用链；注释解释必要的规则和原因，避免复述每一行代码。
 - 不为潜在拓展预建插件系统、微服务或通用框架。允许未来按实际需求演进架构。
 - 可以依据github，csdn以及各大网络等等作为参考源进行自由发挥。
-- 采用c/c++进行编写，python也可以，如果实在需要也可以引进其他语言设定
-- 全程按照SPEC.md（项目策划属来执行）
+- 采用c/c++进行编写，python也可以，如果实在需要也可以引进其他语言设定，CMake进行后端的构建
+- 全程按照SPEC.md（项目策划书来执行流程基础构建框架）\[基础版]
 - 此项目的github的仓库为[zane372/Web-based-Intelligent-Inspection-Robot: 基于 Web 的智能巡检机器人二维仿真系统](https://github.com/zane372/Web-based-Intelligent-Inspection-Robot)
+- 前端ui设计：基础技术：用HTML语义化标签构建结构，Tailwind CSS/自定义变量管理样式，JavaScript实现交互；优先复用组件库（Headless UI、Radix UI、Chakra UI）避免重复开发。
 - 项目模板仓库为 https://github.com/Yhimhas/patrol-sim 仓库 docs/ 中的需求、分工、架构和运行说明是参考材料。大家可以自行安排文件名、章节和表格，也可以合并成一份文档，只要把实际功能、运行方式、项目架构和成员贡献写清楚即可。
 ## 4. Git 分支与提交
 ### 4.1 合理使用分支
