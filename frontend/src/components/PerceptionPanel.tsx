@@ -26,10 +26,10 @@ export function PerceptionPanel({ state }: { state: PerceptionState }) {
   return (
     <section
       aria-label="虚拟感知"
-      className="panel flex flex-col gap-5 p-6 text-sm"
+      className="panel flex h-full min-h-0 flex-col gap-4 p-5 text-sm"
     >
       <div className="flex items-center justify-between gap-4">
-        <h2 className="m-0 text-lg font-bold text-ink">虚拟感知</h2>
+        <h2 className="m-0 text-base font-bold text-ink">虚拟感知</h2>
         <p
           className="m-0 inline-flex items-center gap-2 font-semibold text-ink-soft"
           role="status"
@@ -41,8 +41,8 @@ export function PerceptionPanel({ state }: { state: PerceptionState }) {
         </p>
       </div>
 
-      <div className="flex flex-col gap-2.5" aria-label="三向测距">
-        <h3 className="hazard-label m-0">三向测距</h3>
+      <div className="flex shrink-0 flex-col gap-2">
+        <h3 className="control-label m-0">三向测距</h3>
         {ranges.map((r) => (
           <div key={r.label} className="readout-row">
             <span className="text-ink-muted">{r.label}</span>
@@ -57,9 +57,12 @@ export function PerceptionPanel({ state }: { state: PerceptionState }) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h3 className="hazard-label m-0">活动异常</h3>
-        <ul className="m-0 flex max-h-60 list-none flex-col gap-2 overflow-y-auto pl-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
+        <h3 className="control-label m-0">活动异常</h3>
+        <ul
+          className="m-0 flex min-h-0 flex-1 list-none flex-col gap-2 overflow-y-auto pl-0"
+          tabIndex={0}
+        >
           {state.activeDetections.length === 0 ? (
             <li className="text-ink-muted">无</li>
           ) : (
@@ -79,11 +82,12 @@ export function PerceptionPanel({ state }: { state: PerceptionState }) {
         </ul>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h3 className="hazard-label m-0">感知事件</h3>
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
+        <h3 className="control-label m-0">感知事件</h3>
         <ul
-          className="m-0 flex max-h-60 list-none flex-col gap-2 overflow-y-auto pl-0"
+          className="m-0 flex min-h-0 flex-1 list-none flex-col gap-2 overflow-y-auto pl-0"
           aria-live="polite"
+          tabIndex={0}
         >
           {state.truncated && (
             <li className="text-ink-muted">事件已截断，正在重建…</li>

@@ -2,6 +2,7 @@
 // 与状态机、渲染器解耦，便于单测与复用。
 import type { PerceptionState } from "./perception_state";
 import type { AppState } from "./state";
+import { severityHex } from "./theme";
 import type {
   Detection,
   Heading,
@@ -128,14 +129,7 @@ export function severityText(s: Severity): string {
 }
 
 export function severityColor(s: Severity): string {
-  switch (s) {
-    case "LOW":
-      return "#d97706";
-    case "MEDIUM":
-      return "#ea580c";
-    case "HIGH":
-      return "#bd2a22"; // 与 --color-danger 一致
-  }
+  return severityHex[s];
 }
 
 export function perceptionStatusText(s: PerceptionState): string {

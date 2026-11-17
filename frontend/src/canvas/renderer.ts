@@ -1,21 +1,11 @@
-// Canvas 2D 渲染器：工业安全现场的网格地图、警戒边界、障碍物（危险区）、
-// 机器人本体与朝向指示、已发现异常图层。不依赖 DOM 格子；
-// 坐标换算 pixelX = (x + 0.5) * cellSize。
+// Canvas 2D 渲染器：定向越野地图——可通行地形、等高线网格、密林障碍、
+// 深土边界、紫色航线（已走轨迹）、紫色控制点机器人、指北针；感知异常图层。
+// 不依赖 DOM 格子；坐标换算 pixelX = (x + 0.5) * cellSize。
 import { severityColor } from "../format";
-import type { Detection, Heading, MapInfo, RobotState } from "../types";
+import { palette } from "../theme";
+import type { Detection, Heading, MapInfo, Position, RobotState } from "../types";
 
 export const DEFAULT_CELL_SIZE = 32;
-
-// 工业安全现场配色（浅色现场，适配明亮演示/投影环境）。
-const FIELD = "#f2f5f7"; // 现场浅底
-const GRID = "#d9e0e7"; // 网格细线
-const BOUNDARY = "#1b2531"; // 外边界（工装墨色）
-const BOUNDARY_WARN = "#d97706"; // 边界警示内线（安全琥珀）
-const OBSTACLE = "#26303c"; // 障碍底色（深炭）
-const OBSTACLE_SLASH = "#e2a50c"; // 障碍斜纹（警戒黄）
-const ROBOT_BODY = "#1b2531"; // 机器人本体
-const ROBOT_HEADING = "#e2a50c"; // 朝向指示（警戒黄）
-const ROBOT_RING = "#d97706"; // 传感器环（安全琥珀）
 
 // 逻辑单元格中心对应的像素坐标。
 export function cellCenter(
@@ -67,30 +57,29 @@ function drawRobot(
   cellSize: number,
 ): void {
   const center = cellCenter(robot.position, cellSize);
-  const radius = cellSize * 0.4;
 
-  // 传感器环：本体外围的薄环，体现巡检设备的传感范围。
-  ctx.strokeStyle = ROBOT_RING;
-  ctx.lineWidth = 2;
+  // 控制点环：紫色圆环（定向越野控制点符号）。
+  ctx.strokeStyle = palette.course;
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.arc(center.x, center.y, cellSize * 0.52, 0, Math.PI * 2);
+  ctx.arc(center.x, center.y, cellSize * 0.48, 0, Math.PI * 2);
   ctx.stroke();
 
-  // 本体：填充圆（深炭，像巡检设备的工程外壳）。
-  ctx.fillStyle = ROBOT_BODY;
+  // 本体：填充圆（墨色）。
+  ctx.fillStyle = palette.robotBody;
   ctx.beginPath();
-  ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+  ctx.arc(center.x, center.y, cellSize * 0.3, 0, Math.PI * 2);
   ctx.fill();
 
-  // 朝向指示：朝 heading 方向伸出的实心三角（非仅靠颜色区分）。
+  // 朝向指示：朝 heading 方向伸出的紫色实心三角（非仅靠颜色区分）。
   const dir = headingVector(robot.heading);
   const tip = {
-    x: center.x + dir.x * (radius + cellSize * 0.25),
-    y: center.y + dir.y * (radius + cellSize * 0.25),
+    x: center.x + dir.x * cellSize * 0.52,
+    y: center.y + dir.y * cellSize * 0.52,
   };
   const perp = { x: -dir.y, y: dir.x };
-  const baseInset = radius * 0.3;
-  const halfWidth = cellSize * 0.18;
+  const halfWidth = cellSize * 0.16;
+  const baseInset = cellSize * 0.08;
   const base1 = {
     x: center.x + dir.x * baseInset + perp.x * halfWidth,
     y: center.y + dir.y * baseInset + perp.y * halfWidth,
@@ -99,7 +88,7 @@ function drawRobot(
     x: center.x + dir.x * baseInset - perp.x * halfWidth,
     y: center.y + dir.y * baseInset - perp.y * halfWidth,
   };
-  ctx.fillStyle = ROBOT_HEADING;
+  ctx.fillStyle = palette.course;
   ctx.beginPath();
   ctx.moveTo(tip.x, tip.y);
   ctx.lineTo(base1.x, base1.y);
@@ -114,15 +103,99 @@ function drawObstacle(
   y: number,
   cellSize: number,
 ): void {
-  ctx.fillStyle = OBSTACLE;
+  ctx.fillStyle = palette.obstacle;
   ctx.fillRect(x, y, cellSize, cellSize);
-  // 危险斜纹：角到角的警戒黄斜线（始终在格内），图形化区分障碍（非仅颜色）。
-  ctx.strokeStyle = OBSTACLE_SLASH;
-  ctx.lineWidth = 3;
+  // 密林纹理：两条斜线，图形化区分障碍（非仅颜色）。
+  ctx.strokeStyle = palette.obstacleHatch;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(x + 2, y + cellSize - 2);
-  ctx.lineTo(x + cellSize - 2, y + 2);
+  ctx.moveTo(x + 3, y + cellSize - 3);
+  ctx.lineTo(x + cellSize - 3, y + 3);
   ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + cellSize / 2, y + cellSize - 2);
+  ctx.lineTo(x + cellSize - 2, y + cellSize / 2);
+  ctx.stroke();
+}
+
+// 指北针：右上角，指向上方（北 = 上 = -y）。
+function drawNorthArrow(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  cellSize: number,
+): void {
+  const cx = width - cellSize * 1.1;
+  const cy = cellSize * 1.1;
+  const r = cellSize * 0.45;
+
+  // 箭杆。
+  ctx.strokeStyle = palette.north;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r);
+  ctx.lineTo(cx, cy - r);
+  ctx.stroke();
+
+  // 箭头（向上）。
+  ctx.fillStyle = palette.north;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx - r * 0.4, cy - r * 0.4);
+  ctx.lineTo(cx + r * 0.4, cy - r * 0.4);
+  ctx.closePath();
+  ctx.fill();
+
+  // "N" 标注。
+  ctx.fillStyle = palette.north;
+  ctx.font = `bold ${Math.round(cellSize * 0.55)}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("N", cx, cy - r - cellSize * 0.32);
+}
+
+// 紫色航线：连接已走单元格中心的折线，画在地形/障碍之上、机器人之下，
+// 像定向越野地图上压在一切之上的课程线（签名动效）。
+function drawCourse(
+  ctx: CanvasRenderingContext2D,
+  visited: Position[],
+  cellSize: number,
+): void {
+  if (visited.length < 2) {
+    return;
+  }
+  ctx.strokeStyle = palette.course;
+  ctx.lineWidth = Math.max(3, cellSize * 0.1);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  const first = cellCenter(visited[0], cellSize);
+  ctx.moveTo(first.x, first.y);
+  for (let i = 1; i < visited.length; i++) {
+    const c = cellCenter(visited[i], cellSize);
+    ctx.lineTo(c.x, c.y);
+  }
+  ctx.stroke();
+}
+
+// 地形质感：确定性 per-cell 染色（约 12% 格略绿/略暖），
+// 让等高线网格读作"地形"而非"加粗方格"。哈希稳定，不随重绘闪烁。
+function drawTerrainTexture(
+  ctx: CanvasRenderingContext2D,
+  map: MapInfo,
+  cellSize: number,
+): void {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const v = (x * 73856093 + y * 19349663) >>> 0;
+      if (v % 17 < 2) {
+        ctx.fillStyle = palette.terrainA;
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+      } else if (v % 23 < 1) {
+        ctx.fillStyle = palette.terrainB;
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+      }
+    }
+  }
 }
 
 export function draw(
@@ -130,44 +203,55 @@ export function draw(
   map: MapInfo,
   robot: RobotState | null,
   cellSize: number,
+  visited?: Position[],
 ): void {
   const width = map.width * cellSize;
   const height = map.height * cellSize;
 
   ctx.clearRect(0, 0, width, height);
 
-  // 背景。
-  ctx.fillStyle = FIELD;
+  // 背景：可通行地形。
+  ctx.fillStyle = palette.field;
   ctx.fillRect(0, 0, width, height);
 
-  // 网格线（细）。
-  ctx.strokeStyle = GRID;
-  ctx.lineWidth = 1;
+  // 地形质感（网格之下）。
+  drawTerrainTexture(ctx, map, cellSize);
+
+  // 等高线网格：细棕线；每 5 格一条计曲线（略深）。
   for (let x = 1; x < map.width; x++) {
+    ctx.strokeStyle = x % 5 === 0 ? palette.gridIndex : palette.grid;
+    ctx.lineWidth = x % 5 === 0 ? 1.5 : 1;
     ctx.beginPath();
     ctx.moveTo(x * cellSize, 0);
     ctx.lineTo(x * cellSize, height);
     ctx.stroke();
   }
   for (let y = 1; y < map.height; y++) {
+    ctx.strokeStyle = y % 5 === 0 ? palette.gridIndex : palette.grid;
+    ctx.lineWidth = y % 5 === 0 ? 1.5 : 1;
     ctx.beginPath();
     ctx.moveTo(0, y * cellSize);
     ctx.lineTo(width, y * cellSize);
     ctx.stroke();
   }
 
-  // 障碍物：深色危险区 + 警戒斜纹，机器人无法进入。
+  // 障碍物：密林绿 + 纹理斜线，机器人无法进入。
   for (const o of map.obstacles) {
     drawObstacle(ctx, o.x * cellSize, o.y * cellSize, cellSize);
   }
 
-  // 外边界：双警戒线（墨色外框 + 安全琥珀警示内线）。
-  ctx.strokeStyle = BOUNDARY;
+  // 外边界：深土色地图边框。
+  ctx.strokeStyle = palette.boundary;
   ctx.lineWidth = 3;
   ctx.strokeRect(1.5, 1.5, width - 3, height - 3);
-  ctx.strokeStyle = BOUNDARY_WARN;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(6, 6, width - 12, height - 12);
+
+  // 紫色航线（已走轨迹，在机器人之下）。
+  if (visited) {
+    drawCourse(ctx, visited, cellSize);
+  }
+
+  // 指北针。
+  drawNorthArrow(ctx, width, cellSize);
 
   if (robot) {
     drawRobot(ctx, robot, cellSize);
@@ -191,6 +275,10 @@ export function drawPerceptionLayer(
     ctx.lineTo(center.x - r * 0.92, center.y + r * 0.72);
     ctx.closePath();
     ctx.fill();
+    // 白描边：保证在密林绿底上也清晰。
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
     ctx.fillStyle = "#ffffff";
     ctx.font = `bold ${Math.round(cellSize * 0.5)}px sans-serif`;
     ctx.textAlign = "center";

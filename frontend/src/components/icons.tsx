@@ -94,7 +94,7 @@ export function WarningIcon(props: IconProps) {
       <path d="M12 3 2.5 20h19L12 3z" />
       <path
         d="M12 10v4M12 17.2v.1"
-        stroke="currentColor"
+        stroke="#ffffff"
         strokeWidth="2.2"
         strokeLinecap="round"
         fill="none"

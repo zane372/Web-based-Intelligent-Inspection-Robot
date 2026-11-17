@@ -7,7 +7,7 @@
 ## 功能特性
 
 - 二维网格地图（默认 `30 × 30`，含 40 个障碍物，`config/map.json` 可配置），Canvas 绘制网格、边界、障碍物、机器人位置与朝向。
-- 桌面两栏布局：左侧放大网格地图，右侧竖排读数面板、方向键、重置、自动巡检按钮与使用帮助；手动控制每次移动一格。
+- 桌面三栏布局：左侧放大网格地图，中间控制面板（读数、方向键、重置、自动巡检），右侧虚拟感知面板；手动控制每次移动一格。
 - 边界保护：越界尝试不改变位置，但更新朝向并反馈 `BLOCKED_BOUNDARY`。
 - 障碍物阻挡：移动目标为障碍物时位置不变、朝向更新并反馈 `BLOCKED_OBSTACLE`。
 - 自动巡检：一键遍历全部可通行格，覆盖路径由 **Boustrophedon 单元分解**（矩形单元蛇形扫描）与 **贪心 BFS** 两种规划器竞争取更短者；可随时停止，巡检期间位置与 `sequence` 实时刷新。巡检过程带障碍物/边界检测：若异常命中障碍物或边界，机器人报警（`BLOCKED_OBSTACLE`／`BLOCKED_BOUNDARY`）并自动重规划绕行路径，前端锁存显示「巡检碰到障碍物，正在绕行」或「巡检到达边界，正在绕行」。
@@ -45,12 +45,12 @@
 │   └── tests/              # GoogleTest 单元测试
 ├── frontend/               # React 前端
 │   ├── src/main.tsx        # 入口
-│   ├── src/App.tsx         # 三栏布局 + 状态编排
+│   ├── src/App.tsx         # 三栏布局（左地图、中控制、右感知）+ 状态编排
 │   ├── src/components/     # StatusBar、MapPanel、ControlPanel、PerceptionPanel、icons
 │   ├── src/hooks/          # useRobotController、usePerceptionController
 │   ├── src/api/client.ts   # 统一 API 客户端
 │   ├── src/canvas/renderer.ts
-│   ├── src/{state,perception_state,types,format}.ts
+│   ├── src/{state,perception_state,types,format,theme}.ts
 │   └── tests/              # Vitest 测试
 ├── config/map.json         # 地图与初始姿态配置
 ├── config/perception.json  # 虚拟感知配置（测距范围、异常半径、异常源初始位置，重置后随机）
