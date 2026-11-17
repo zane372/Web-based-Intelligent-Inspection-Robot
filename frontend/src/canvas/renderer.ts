@@ -153,28 +153,63 @@ function drawNorthArrow(
   ctx.fillText("N", cx, cy - r - cellSize * 0.32);
 }
 
-// 紫色航线：连接已走单元格中心的折线，画在地形/障碍之上、机器人之下，
-// 像定向越野地图上压在一切之上的课程线（签名动效）。
+// 紫色航线：已走轨迹的「彗尾 + 粒子」效果（签名动效）。
+// 只保留最近 MAX_TRAIL 格，旧轨迹随机器人移动自然淡出消失；粒子带呼吸脉冲（动态）。
+const MAX_TRAIL = 8;
+
 function drawCourse(
   ctx: CanvasRenderingContext2D,
   visited: Position[],
   cellSize: number,
+  now = 0,
 ): void {
   if (visited.length < 2) {
     return;
   }
+  // 尾巴 = 最近 MAX_TRAIL 格；head = 最新位置（数组尾），tail = 最旧位置（数组头）。
+  const trail =
+    visited.length <= MAX_TRAIL
+      ? visited
+      : visited.slice(visited.length - MAX_TRAIL);
+  const m = trail.length;
+  const pts = trail.map((p) => cellCenter(p, cellSize));
+
+  // 1) 细而淡的连线（彗尾脊柱）：圆角 + 低透明度，弱化折线的硬直角。
   ctx.strokeStyle = palette.course;
-  ctx.lineWidth = Math.max(3, cellSize * 0.1);
+  ctx.lineWidth = Math.max(2, cellSize * 0.06);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
+  ctx.globalAlpha = 0.3;
   ctx.beginPath();
-  const first = cellCenter(visited[0], cellSize);
-  ctx.moveTo(first.x, first.y);
-  for (let i = 1; i < visited.length; i++) {
-    const c = cellCenter(visited[i], cellSize);
-    ctx.lineTo(c.x, c.y);
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < m; i++) {
+    ctx.lineTo(pts[i].x, pts[i].y);
   }
   ctx.stroke();
+
+  // 2) 粒子：每个轨迹格一个发光圆点（外光晕 + 亮核），头亮尾淡、头大尾小，呼吸脉冲。
+  for (let i = 0; i < m; i++) {
+    const a = (m - 1 - i) / (m - 1); // 1=最新(头) → 0=最旧(尾)
+    const pulse = 0.7 + 0.3 * Math.sin(now * 0.005 - i * 0.9);
+    const alpha = Math.max(0.05, (0.08 + 0.92 * a) * pulse);
+    const r = cellSize * (0.045 + 0.105 * a);
+
+    // 外光晕：大而淡，营造柔光。
+    ctx.fillStyle = palette.course;
+    ctx.globalAlpha = alpha * 0.35;
+    ctx.beginPath();
+    ctx.arc(pts[i].x, pts[i].y, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 亮核：小而实。
+    ctx.globalAlpha = Math.min(1, alpha);
+    ctx.beginPath();
+    ctx.arc(pts[i].x, pts[i].y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 复位透明度，避免影响后续绘制（机器人/感知层）。
+  ctx.globalAlpha = 1;
 }
 
 // 地形质感：确定性 per-cell 染色（约 12% 格略绿/略暖），
@@ -204,6 +239,7 @@ export function draw(
   robot: RobotState | null,
   cellSize: number,
   visited?: Position[],
+  now = 0,
 ): void {
   const width = map.width * cellSize;
   const height = map.height * cellSize;
@@ -247,7 +283,7 @@ export function draw(
 
   // 紫色航线（已走轨迹，在机器人之下）。
   if (visited) {
-    drawCourse(ctx, visited, cellSize);
+    drawCourse(ctx, visited, cellSize, now);
   }
 
   // 指北针。

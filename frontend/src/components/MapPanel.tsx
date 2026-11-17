@@ -46,6 +46,12 @@ export function MapPanel({
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const [dprKey, setDprKey] = useState(0);
 
+  // 最新绘制状态快照：rAF 循环持续读取，避免每帧重建闭包。
+  const drawStateRef = useRef({ map, robot, visited, discovered });
+  useEffect(() => {
+    drawStateRef.current = { map, robot, visited, discovered };
+  }, [map, robot, visited, discovered]);
+
   // 跨 DPI 显示器拖动时 devicePixelRatio 会变化；监听分辨率变化触发重采样。
   useEffect(() => {
     let mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
@@ -59,7 +65,7 @@ export function MapPanel({
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  // 地图变化或 DPR 变化时（重新）初始化画布并绘制一次。
+  // 地图变化或 DPR 变化时（重新）初始化画布（不在此绘制，绘制统一由 rAF 循环负责）。
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !map) {
@@ -67,23 +73,23 @@ export function MapPanel({
       return;
     }
     ctxRef.current = setupCanvas(canvas, map, DEFAULT_CELL_SIZE);
-    const ctx = ctxRef.current;
-    if (ctx) {
-      draw(ctx, map, robot, DEFAULT_CELL_SIZE, visited);
-      drawPerceptionLayer(ctx, discovered, DEFAULT_CELL_SIZE);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, dprKey]);
 
-  // 机器人/已发现异常/已走轨迹变化时重绘。
+  // 持续重绘：requestAnimationFrame 驱动粒子动画（彗尾呼吸脉冲），每帧全量重绘。
   useEffect(() => {
-    const ctx = ctxRef.current;
-    if (!ctx || !map) {
-      return;
-    }
-    draw(ctx, map, robot, DEFAULT_CELL_SIZE, visited);
-    drawPerceptionLayer(ctx, discovered, DEFAULT_CELL_SIZE);
-  }, [robot, discovered, map, visited]);
+    let rafId = 0;
+    const tick = (now: number): void => {
+      const ctx = ctxRef.current;
+      const s = drawStateRef.current;
+      if (ctx && s.map) {
+        draw(ctx, s.map, s.robot, DEFAULT_CELL_SIZE, s.visited, now);
+        drawPerceptionLayer(ctx, s.discovered, DEFAULT_CELL_SIZE);
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   const blocked = ui === "BOUNDARY_FEEDBACK";
   const mapSummary = map

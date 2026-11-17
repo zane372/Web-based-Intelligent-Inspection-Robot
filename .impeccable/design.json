@@ -61,9 +61,9 @@
       "name": "Course Trail",
       "kind": "custom",
       "refersTo": "course-trail",
-      "description": "已走轨迹的紫色折线：连接机器人走过的单元格中心，压在地形之上、机器人之下，像定向越野地图上压在一切之上的课程线。",
+      "description": "已走轨迹的紫色「彗尾粒子」：细而淡的连线脊柱 + 每个轨迹格一个发光圆点（外光晕 + 亮核），头部亮尾部淡、头大尾小、呼吸脉冲。只保留最近 8 格，旧轨迹随移动淡出消失，压在地形之上、机器人之下。",
       "html": "<canvas role=\"img\"></canvas>",
-      "css": ".ds-course-trail{stroke:#7c3aed;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}"
+      "css": ".ds-course-trail{stroke:#7c3aed;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;opacity:.3}"
     },
     {
       "name": "Signal Lamp",
