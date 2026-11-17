@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   DEFAULT_CELL_SIZE,
   draw,
@@ -74,9 +74,6 @@ export function MapPanel({ className, map, robot, ui, discovered }: Props) {
   }, [robot, discovered, map]);
 
   const blocked = ui === "BOUNDARY_FEEDBACK";
-  const canvasStyle: CSSProperties = {
-    maxWidth: "min(100%, calc(100vh - 250px))",
-  };
   const mapSummary = map
     ? `${map.width}×${map.height} 网格地图${
         robot
@@ -98,14 +95,13 @@ export function MapPanel({ className, map, robot, ui, discovered }: Props) {
           ref={canvasRef}
           role="img"
           aria-label={mapSummary}
-          className="block h-auto w-full"
-          style={canvasStyle}
+          className="block h-full w-full"
         />
       </div>
 
       {/* 图例：图形 + 文字，非仅颜色。 */}
       <div
-        className="flex flex-wrap items-center gap-x-6 gap-y-2"
+        className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2"
         aria-label="图例"
       >
         <LegendItem

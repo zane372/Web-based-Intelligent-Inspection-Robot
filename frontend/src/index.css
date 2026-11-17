@@ -183,6 +183,11 @@ body {
   background: var(--color-surface);
   box-shadow: 0 6px 24px color-mix(in srgb, var(--color-ink) 10%, transparent);
   overflow: hidden;
+  /* 地图是 30×30 正方形，画布按 1:1 撑满卡片；宽度受视口高度约束，居中，避免右/下留白。 */
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  max-width: calc(100vh - 250px);
+  align-self: center;
 }
 .map-frame.is-blocked {
   animation: frame-alert 0.9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
