@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-17T22:53:00+08:00",
+  "title": "Design System: 智能巡检机器人前端",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "安全琥珀 Safety Amber", "canonical": "#b45309", "tonalRamp": ["#2d1a05", "#4a2b08", "#6b3c0c", "#92400e", "#b45309", "#c86a1d", "#e2955a", "#f6ead6"] },
+      "primary-deep": { "role": "primary-deep", "displayName": "安全琥珀·深", "canonical": "#92400e" },
+      "secondary": { "role": "secondary", "displayName": "信号绿 Signal Green", "canonical": "#1a7f3d", "tonalRamp": ["#06240f", "#0a3a18", "#11612e", "#1a7f3d", "#28984b", "#48b96a", "#86d9a0", "#dcf3e3"] },
+      "secondary-deep": { "role": "secondary-deep", "displayName": "信号绿·深", "canonical": "#11612e" },
+      "danger": { "role": "tertiary", "displayName": "信号红 Signal Red", "canonical": "#bd2a22", "tonalRamp": ["#3f0b0a", "#6b1413", "#991b1b", "#bd2a22", "#d63a30", "#e56a5f", "#f0a49c", "#fbe9e7"] },
+      "caution": { "role": "tertiary", "displayName": "中危橙 Caution", "canonical": "#d97706", "tonalRamp": ["#431407", "#7c2d12", "#9a3412", "#c2410c", "#d97706", "#ea8c1a", "#f2a93b", "#ffedd5"] },
+      "caution-deep": { "role": "tertiary", "displayName": "深橙 Caution Deep", "canonical": "#ea580c" },
+      "hazard": { "role": "accent", "displayName": "警戒黄 Hazard Yellow", "canonical": "#e2a50c", "tonalRamp": ["#3f2d06", "#6b4e0a", "#946c0c", "#b89414", "#e2a50c", "#eec22b", "#f4d95e", "#fbf3c7"] },
+      "neutral-bg": { "role": "neutral", "displayName": "现场纸底 Paper", "canonical": "#eceff3", "tonalRamp": ["#cbd5e1", "#dbe1e8", "#e2e8f0", "#eceff3", "#f1f5f9", "#f5f7f9", "#f8fafc", "#ffffff"] },
+      "neutral-surface": { "role": "neutral", "displayName": "表面 Surface", "canonical": "#ffffff" },
+      "neutral-surface-soft": { "role": "neutral", "displayName": "软表面 Surface Soft", "canonical": "#f5f7f9" },
+      "neutral-line": { "role": "neutral", "displayName": "线 Line", "canonical": "#dbe1e8" },
+      "neutral-line-strong": { "role": "neutral", "displayName": "强线 Line Strong", "canonical": "#c3ccd6" },
+      "neutral-ink": { "role": "neutral", "displayName": "墨色 Ink", "canonical": "#1b2531", "tonalRamp": ["#0a0e13", "#131b24", "#1b2531", "#334155", "#455167", "#5b6b82", "#94a3b8", "#cbd5e1"] },
+      "neutral-ink-soft": { "role": "neutral", "displayName": "墨色·软 Ink Soft", "canonical": "#455167" },
+      "neutral-ink-muted": { "role": "neutral", "displayName": "墨色·弱 Ink Muted", "canonical": "#5b6b82" },
+      "neutral-ink-faint": { "role": "neutral", "displayName": "墨色·淡 Ink Faint", "canonical": "#a7b0bd" },
+      "field": { "role": "canvas", "displayName": "现场浅底 Field", "canonical": "#f2f5f7" },
+      "grid": { "role": "canvas", "displayName": "网格细线 Grid", "canonical": "#d9e0e7" },
+      "obstacle": { "role": "canvas", "displayName": "障碍深炭 Obstacle", "canonical": "#26303c" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "页头主标题「智能巡检机器人」，唯一大字。" },
+      "body": { "displayName": "Body", "purpose": "正文与帮助文案。" },
+      "label": { "displayName": "Label", "purpose": "现场标牌式分区小标题，大写加宽字距。" },
+      "mono": { "displayName": "Mono", "purpose": "所有数值读数，等宽 tabular-nums 对齐。" }
+    },
+    "shadows": [
+      { "name": "ambient-low", "value": "0 2px 10px rgba(27,37,49,0.06)", "purpose": "面板的极轻抬升。" },
+      { "name": "elevated", "value": "0 6px 24px rgba(27,37,49,0.10)", "purpose": "地图框的主抬升阴影。" },
+      { "name": "button-glow-green", "value": "0 3px 10px rgba(26,127,61,0.30)", "purpose": "巡逻按钮的绿色柔光晕。" },
+      { "name": "button-glow-amber", "value": "0 3px 10px rgba(180,83,9,0.30)", "purpose": "巡逻按钮激活态的琥珀柔光晕。" }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "信号灯脉冲、地图框危险报警。" },
+      { "name": "ease-fast", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "按钮状态过渡（0.15s）。" }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "800px" },
+      { "name": "lg", "value": "1200px" },
+      { "name": "xl", "value": "1840px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Hazard Tape",
+      "kind": "custom",
+      "refersTo": "hazard-tape",
+      "description": "页头顶部的黄黑斜纹警戒带，全场唯一的图案签名。",
+      "html": "<div class=\"ds-hazard-tape\" role=\"presentation\"></div>",
+      "css": ".ds-hazard-tape{height:6px;background:repeating-linear-gradient(-45deg,#1b2531 0 14px,#e2a50c 14px 28px)}"
+    },
+    {
+      "name": "Signal Lamp",
+      "kind": "custom",
+      "refersTo": "signal-lamp",
+      "description": "12px 圆点指示灯，绿/琥珀/红/灰四态，柔边光晕表达发光。",
+      "html": "<span class=\"ds-signal-lamp is-green\" aria-hidden=\"true\"></span>",
+      "css": ".ds-signal-lamp{--lamp:#a7b0bd;display:inline-block;width:12px;height:12px;border-radius:999px;background:var(--lamp);box-shadow:0 0 0 3px color-mix(in srgb,var(--lamp) 18%,transparent)}.ds-signal-lamp.is-green{--lamp:#1a7f3d}.ds-signal-lamp.is-amber{--lamp:#d97706}.ds-signal-lamp.is-red{--lamp:#bd2a22}.ds-signal-lamp.is-muted{--lamp:#a7b0bd}.ds-signal-lamp.is-pulsing{animation:ds-lamp-pulse 1s cubic-bezier(0.16,1,0.3,1) infinite}@keyframes ds-lamp-pulse{0%,100%{box-shadow:0 0 0 3px color-mix(in srgb,var(--lamp) 18%,transparent)}50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--lamp) 10%,transparent)}}"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "chip",
+      "refersTo": "status-pill",
+      "description": "白底胶囊，内嵌信号灯 + 状态文字，实时播报运行状态。",
+      "html": "<span class=\"ds-status-pill\"><span class=\"ds-signal-lamp is-green\"></span>运行正常</span>",
+      "css": ".ds-status-pill{display:inline-flex;align-items:center;gap:10px;padding:7px 14px;border:1px solid #c3ccd6;border-radius:999px;background:#fff;color:#455167;font-size:14px;font-weight:600}"
+    },
+    {
+      "name": "Readout Row",
+      "kind": "card",
+      "refersTo": "readout-row",
+      "description": "仪器读出行：左标签右数值，数值等宽对齐。",
+      "html": "<div class=\"ds-readout-row\"><span class=\"ds-readout-label\">位置</span><span class=\"ds-readout-value\">(12, 08)</span></div>",
+      "css": ".ds-readout-row{display:flex;justify-content:space-between;gap:12px;padding:11px 14px;background:#f5f7f9;border:1px solid #dbe1e8;border-radius:10px}.ds-readout-label{font-size:14px;color:#5b6b82}.ds-readout-value{font-family:ui-monospace,Cascadia Mono,Consolas,monospace;font-variant-numeric:tabular-nums;font-weight:600;color:#1b2531}"
+    },
+    {
+      "name": "Direction Button",
+      "kind": "button",
+      "refersTo": "dir-btn",
+      "description": "52px 方形十字方向键，hover 填琥珀，active 下压。",
+      "html": "<button class=\"ds-dir-btn\" aria-label=\"向上移动\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg></button>",
+      "css": ".ds-dir-btn{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:12px;border:1px solid #c3ccd6;background:#fff;color:#1b2531;transition:background-color .15s ease,color .15s ease,border-color .15s ease,transform .05s ease}.ds-dir-btn:hover{background:#b45309;border-color:#b45309;color:#fff}.ds-dir-btn:active{transform:translateY(1px)}.ds-dir-btn:focus-visible{outline:2px solid #b45309;outline-offset:2px}"
+    },
+    {
+      "name": "Patrol Button",
+      "kind": "button",
+      "refersTo": "patrol-btn",
+      "description": "主按钮：信号绿底白字；激活态切换为安全琥珀。",
+      "html": "<button class=\"ds-patrol-btn\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M8 5v14l11-7z\"/></svg>自动巡检</button>",
+      "css": ".ds-patrol-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 18px;border-radius:12px;font-weight:600;font-size:15px;border:1px solid transparent;background:#1a7f3d;color:#fff;box-shadow:0 3px 10px rgba(26,127,61,.3);transition:background-color .15s ease,box-shadow .15s ease,transform .05s ease}.ds-patrol-btn:hover{background:#11612e}.ds-patrol-btn.is-active{background:#b45309;box-shadow:0 3px 10px rgba(180,83,9,.3)}.ds-patrol-btn:focus-visible{outline:2px solid #b45309;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "action-btn",
+      "description": "次级按钮：软表面底 + 强线边框，hover 加深。",
+      "html": "<button class=\"ds-action-btn\">重置</button>",
+      "css": ".ds-action-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 18px;border-radius:12px;font-weight:600;font-size:15px;border:1px solid #c3ccd6;background:#f5f7f9;color:#1b2531;transition:background-color .15s ease,transform .05s ease}.ds-action-btn:hover{background:#dbe1e8}.ds-action-btn:active{transform:translateY(1px)}.ds-action-btn:focus-visible{outline:2px solid #b45309;outline-offset:2px}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "reconnect-btn",
+      "description": "危险按钮：信号红底白字，仅断线重连时出现。",
+      "html": "<button class=\"ds-reconnect-btn\">重新连接</button>",
+      "css": ".ds-reconnect-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 18px;border-radius:12px;font-weight:600;font-size:15px;border:1px solid transparent;background:#bd2a22;color:#fff;transition:background-color .15s ease,transform .05s ease}.ds-reconnect-btn:hover{background:#991b1b}.ds-reconnect-btn:active{transform:translateY(1px)}.ds-reconnect-btn:focus-visible{outline:2px solid #b45309;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "工业安全现场",
+    "overview": "这是一块为巡检机器人的二维地图仿真控制台定制的「工业安全现场」界面：明亮的浅灰现场底上，用安全琥珀、信号绿、信号红三种语义色做状态与动作，用警戒带、信号灯、仪器读数这些真实工业现场的物件语言组织界面，而不是用装饰性渐变或柔和圆角「美化」它。\n\n界面的气质是「明确、实心、像现场设备」：每一个可交互元素都有清晰的几何轮廓、可见的状态变化和明确的语义色。信息以「读出行」的仪器面板形式成组呈现，数字一律等宽、可对齐，像工业仪表读数一样稳定。密度中等偏紧，适合桌面监控与投影演示。",
+    "keyCharacteristics": [
+      "三种安全信号色各司其职：琥珀（主 accent/警示）、绿（运行/开始）、红（危险/故障）",
+      "警戒带（黄黑斜纹）与信号灯是贯穿全场的视觉签名",
+      "等宽数字读数（仪器面板质感），信息按「读出行」成组",
+      "明亮浅底 + 深墨色文字，对比清晰，适合明亮环境"
+    ],
+    "rules": [
+      { "name": "The One-Accent Rule", "body": "安全琥珀是唯一的「强调」色，仅出现在激活/警示/悬停这些需要引起注意的瞬间；大面积填充只允许信号绿（开始）与信号红（危险）这两个语义明确的动作色。琥珀的稀缺正是它的意义。", "section": "colors" },
+      { "name": "The Semantic-Color Rule", "body": "绿=运行/开始，红=危险/故障，琥珀=警示/激活。同一语义永不换色。", "section": "colors" },
+      { "name": "The Instrument-Readout Rule", "body": "凡是数字，必用等宽 + tabular-nums，让它像仪表读数一样对齐稳定；文字用系统无衬线，绝不混用。", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "界面以浅底 + 1px 边框的「平面分层」为主，阴影只用于地图框与主按钮这两个需要「浮起」的焦点，作为响应式反馈而非装饰。", "section": "elevation" },
+      { "name": "The Soft-Square Rule", "body": "直角被压成 12–14px 的轻微圆角，整体仍是方正、像设备外壳的几何；只有指示灯与状态胶囊是正圆。", "section": "shapes" }
+    ],
+    "dos": [
+      "用等宽 + tabular-nums 渲染所有数值读数。",
+      "用语义色（绿/红/琥珀）表达状态，且同一语义始终用同一色。",
+      "给每个交互元素 44px 以上的点击区域和清晰的 :focus-visible 琥珀环。",
+      "用警戒带 + 信号灯这两处签名贯穿页面，而不是引入新的装饰图案。"
+    ],
+    "donts": [
+      "不使用渐变文字、玻璃模糊、彩色侧边条或 >1px 的彩色边框装饰。",
+      "不用 emoji 或 Unicode 符号当图标，统一用描边一致的 SVG。",
+      "不把等宽字体当作「技术感」用在代码/数据/测量之外的文字上。",
+      "不引入纯灰阶或纯黑白的第三套色，所有中性色都从现场工装的墨蓝色相调出。",
+      "不用硬偏移阴影（4px 4px 0）或 sparkline/进度环/软圆角矩形当作内容容器。"
+    ]
+  }
+}

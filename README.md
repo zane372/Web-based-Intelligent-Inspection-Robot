@@ -25,7 +25,7 @@
 | 后端 | C++20（GCC 12+）、Crow（HTTP）、nlohmann/json 3.11.x |
 | 仿真核心 | 纯 C++（`domain/`、`control/`、`perception/`，不依赖 Crow／JSON／Canvas） |
 | 构建 | CMake 3.24+、Ninja、GoogleTest + CTest |
-| 前端 | TypeScript 5.x、Vite、原生 Canvas 2D、Vitest、ESLint |
+| 前端 | React 19、TypeScript 5.x、Vite、Tailwind CSS 4、Canvas 2D、Vitest、ESLint |
 | 集成测试 | Python 3.12、pytest 8.x、requests 2.32.x |
 | 交付 | Docker Compose v2、Traefik v3（反向代理）、GitHub Actions |
 
@@ -43,10 +43,14 @@
 │   │   ├── config.cpp      # config/map.json 与 config/perception.json 加载与校验
 │   │   └── dto.hpp         # 枚举 <-> 字符串、JSON DTO
 │   └── tests/              # GoogleTest 单元测试
-├── frontend/               # TypeScript 前端
-│   ├── src/{main,state,types}.ts
+├── frontend/               # React 前端
+│   ├── src/main.tsx        # 入口
+│   ├── src/App.tsx         # 三栏布局 + 状态编排
+│   ├── src/components/     # StatusBar、MapPanel、ControlPanel、PerceptionPanel、icons
+│   ├── src/hooks/          # useRobotController、usePerceptionController
 │   ├── src/api/client.ts   # 统一 API 客户端
 │   ├── src/canvas/renderer.ts
+│   ├── src/{state,perception_state,types,format}.ts
 │   └── tests/              # Vitest 测试
 ├── config/map.json         # 地图与初始姿态配置
 ├── config/perception.json  # 虚拟感知配置（测距范围、异常半径、异常源初始位置，重置后随机）

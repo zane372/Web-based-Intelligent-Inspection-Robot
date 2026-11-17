@@ -1,0 +1,293 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue",
+    Arial, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas,
+    "Courier New", monospace;
+
+  /* 工业现场 · 冷灰蓝中性底 */
+  --color-paper: #eceff3;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f5f7f9;
+  --color-line: #dbe1e8;
+  --color-line-strong: #c3ccd6;
+
+  /* 墨色：从现场工装的黑蓝色相调（非纯黑/纯灰） */
+  --color-ink: #1b2531;
+  --color-ink-soft: #455167;
+  --color-ink-muted: #5b6b82; /* 次级文字：对浅底 ≥4.5:1 */
+  --color-ink-faint: #a7b0bd; /* 仅装饰，不承载信息 */
+
+  /* 安全信号色 */
+  --color-safety: #b45309; /* 主 accent：安全琥珀（深，保证对比度） */
+  --color-safety-strong: #92400e;
+  --color-hazard: #e2a50c; /* 警戒黄（警戒带） */
+  --color-signal: #1a7f3d; /* 信号绿 */
+  --color-signal-strong: #11612e;
+  --color-danger: #bd2a22; /* 信号红（严重度 HIGH） */
+  --color-caution: #d97706; /* 中危橙（严重度 LOW） */
+  --color-caution-deep: #ea580c; /* 深橙（严重度 MEDIUM） */
+
+  /* 地图画布专用（与 canvas/renderer.ts 常量一致） */
+  --color-field: #f2f5f7; /* 现场浅底 */
+  --color-grid: #d9e0e7; /* 网格细线 */
+  --color-obstacle: #26303c; /* 障碍深炭 */
+}
+
+/* ---- 基础 ---- */
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 浏览器面从调色板定制：文本选择、滚动条、焦点环。 */
+::selection {
+  background: var(--color-hazard);
+  color: var(--color-ink);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 999px;
+  border: 2px solid var(--color-surface);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-safety);
+  outline-offset: 2px;
+}
+
+/* ---- 签名组件 ---- */
+
+/* 警戒带：黄黑斜纹（本世界的视觉签名）。 */
+.hazard-tape {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--color-ink) 0 14px,
+    var(--color-hazard) 14px 28px
+  );
+}
+
+/* 信号灯：带柔边光晕的指示灯。 */
+.signal-lamp {
+  --lamp: var(--color-ink-faint);
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--lamp);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lamp) 18%, transparent);
+  flex: 0 0 auto;
+}
+.signal-lamp.is-green {
+  --lamp: var(--color-signal);
+}
+.signal-lamp.is-amber {
+  --lamp: var(--color-caution);
+}
+.signal-lamp.is-red {
+  --lamp: var(--color-danger);
+}
+.signal-lamp.is-muted {
+  --lamp: var(--color-ink-faint);
+}
+
+.signal-lamp.is-pulsing {
+  animation: lamp-pulse 1s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes lamp-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lamp) 18%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--lamp) 10%, transparent);
+  }
+}
+
+/* 状态胶囊。 */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 安全标签：小字、加宽字距（现场标牌风格）。 */
+.hazard-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+/* 仪器读数：等宽数字。 */
+.readout-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+/* 面板。 */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--color-ink) 6%, transparent);
+}
+
+/* 读出行。 */
+.readout-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+}
+
+/* 地图框：警戒边界。 */
+.map-frame {
+  border: 1px solid var(--color-line-strong);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--color-ink) 10%, transparent);
+  overflow: hidden;
+}
+.map-frame.is-blocked {
+  animation: frame-alert 0.9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes frame-alert {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 0%, transparent),
+      0 6px 24px color-mix(in srgb, var(--color-ink) 10%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-danger) 55%, transparent),
+      0 6px 24px color-mix(in srgb, var(--color-ink) 10%, transparent);
+  }
+}
+
+/* ---- 控件 ---- */
+button {
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.dir-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  transition: background-color 0.15s ease, color 0.15s ease,
+    border-color 0.15s ease, transform 0.05s ease;
+}
+.dir-btn:hover:not(:disabled) {
+  background: var(--color-safety);
+  border-color: var(--color-safety);
+  color: #ffffff;
+}
+.dir-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.action-btn,
+.patrol-btn,
+.reconnect-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease, transform 0.05s ease;
+}
+.action-btn {
+  border-color: var(--color-line-strong);
+  background: var(--color-surface-soft);
+  color: var(--color-ink);
+}
+.action-btn:hover:not(:disabled) {
+  background: var(--color-line);
+}
+
+.patrol-btn {
+  background: var(--color-signal);
+  color: #ffffff;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--color-signal) 30%, transparent);
+}
+.patrol-btn:hover:not(:disabled) {
+  background: var(--color-signal-strong);
+}
+.patrol-btn.is-active {
+  background: var(--color-safety);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--color-safety) 30%, transparent);
+}
+.patrol-btn.is-active:hover:not(:disabled) {
+  background: var(--color-safety-strong);
+}
+
+.reconnect-btn {
+  background: var(--color-danger);
+  color: #ffffff;
+}
+.reconnect-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 86%, black);
+}
+
+/* 减少动态偏好：关闭无限脉冲/闪框动画，用静态色保留同一状态语义。 */
+@media (prefers-reduced-motion: reduce) {
+  .signal-lamp.is-pulsing,
+  .map-frame.is-blocked {
+    animation: none;
+  }
+  .map-frame.is-blocked {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 45%, transparent),
+      0 6px 24px color-mix(in srgb, var(--color-ink) 10%, transparent);
+  }
+}
