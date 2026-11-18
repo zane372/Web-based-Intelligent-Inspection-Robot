@@ -3,9 +3,23 @@
 // 不依赖 DOM 格子；坐标换算 pixelX = (x + 0.5) * cellSize。
 import { severityColor } from "../format";
 import { palette } from "../theme";
-import type { Detection, Heading, MapInfo, RobotState, TrailPoint } from "../types";
+import type {
+  Detection,
+  Heading,
+  MapInfo,
+  Position,
+  RobotState,
+  TrailPoint,
+} from "../types";
 
 export const DEFAULT_CELL_SIZE = 32;
+
+// 碰撞反馈：受阻格（越界时钳制到地图边缘格）+ 阻塞发生时刻（performance.now），
+// 驱动红环扩散动画（见 drawBlockedFeedback）。
+export interface BlockedFeedback {
+  cell: Position;
+  at: number;
+}
 
 // 逻辑单元格中心对应的像素坐标。
 export function cellCenter(
@@ -49,6 +63,16 @@ function headingVector(heading: Heading): { x: number; y: number } {
       // 防御：非法 heading 已被 validate 拦截，理论不可达；返回零向量避免 drawRobot 崩溃。
       return { x: 0, y: 0 };
   }
+}
+
+// 受阻格：机器人朝向的下一格（碰撞点）。越界（BLOCKED_BOUNDARY）时钳制到地图
+// 边缘格，让红环落在机器人贴边的位置，真实反映碰撞发生在哪一侧。
+export function blockedCell(robot: RobotState, map: MapInfo): Position {
+  const dir = headingVector(robot.heading);
+  return {
+    x: Math.max(0, Math.min(map.width - 1, robot.position.x + dir.x)),
+    y: Math.max(0, Math.min(map.height - 1, robot.position.y + dir.y)),
+  };
 }
 
 function drawRobot(
@@ -163,6 +187,7 @@ function drawCourse(
   trail: TrailPoint[],
   cellSize: number,
   now = 0,
+  reduceMotion = false,
 ): void {
   // 只保留仍在寿命内的点（now 来自 requestAnimationFrame，与 at 同钟）。
   const alive = trail.filter((p) => now - p.at <= TRAIL_TTL);
@@ -206,6 +231,30 @@ function drawCourse(
   ctx.arc(pts[m - 1].x, pts[m - 1].y, cellSize * 0.12, 0, Math.PI * 2);
   ctx.fill();
 
+  // 3) 头部火花：几颗沿固定方向向外漂散的小粒子（leibox 粒子灵感，克制克量）。
+  // 纯过程化、无状态：随 now 循环向外飞溅并淡出，机器人停下后随头部一起消散。
+  // prefers-reduced-motion 下跳过（装饰性粒子，非必要动效）。
+  if (!reduceMotion) {
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = palette.course;
+    const emberCount = 5;
+    for (let i = 0; i < emberCount; i++) {
+      const cycle = (now * 0.0016 + i * 0.23) % 1; // 每颗错开相位，0→1 循环
+      const angle = (i / emberCount) * Math.PI * 2 + 0.7;
+      const dist = cellSize * (0.18 + 0.5 * easeOutCubic(cycle));
+      const ex = pts[m - 1].x + Math.cos(angle) * dist;
+      const ey = pts[m - 1].y + Math.sin(angle) * dist;
+      const ea = headA * 0.5 * (1 - cycle);
+      if (ea < 0.02) {
+        continue;
+      }
+      ctx.globalAlpha = ea;
+      ctx.beginPath();
+      ctx.arc(ex, ey, Math.max(0.5, cellSize * 0.055), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   // 复位透明度与阴影，避免影响后续绘制（机器人/感知层）。
   ctx.globalAlpha = 1;
   ctx.shadowBlur = 0;
@@ -232,6 +281,98 @@ function drawTerrainTexture(
   }
 }
 
+// 缓动：指数式 ease-out（craft-floor 的动效基调），红环/火花共用。
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// 碰撞反馈：受阻格上的红环扩散 + 格内红晕 + 向外飞溅的火花。
+// 与 useRobotController 的 BOUNDARY_FEEDBACK_MS(1500) 对齐，一次性扩散淡出。
+const BLOCKED_TTL = 1500;
+
+function drawBlockedFeedback(
+  ctx: CanvasRenderingContext2D,
+  blocked: BlockedFeedback,
+  cellSize: number,
+  now: number,
+  reduceMotion = false,
+): void {
+  const age = now - blocked.at;
+  if (age < 0 || age > BLOCKED_TTL) {
+    return;
+  }
+  const t = age / BLOCKED_TTL; // 0→1
+  const center = cellCenter(blocked.cell, cellSize);
+
+  // prefers-reduced-motion：静态化——固定红晕 + 一圈固定红环，不做扩散/火花。
+  // 仍保留「在受阻格标出碰撞位置」这一真实反馈，只是去掉运动。
+  if (reduceMotion) {
+    ctx.fillStyle = palette.danger;
+    ctx.globalAlpha = 0.2;
+    ctx.fillRect(
+      blocked.cell.x * cellSize,
+      blocked.cell.y * cellSize,
+      cellSize,
+      cellSize,
+    );
+    ctx.strokeStyle = palette.danger;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, cellSize * 0.72, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  // 1) 受阻格红晕：快速闪现后淡出（真实标出是哪一格被挡住）。
+  const flash = Math.max(0, 1 - t * 2.2);
+  if (flash > 0) {
+    ctx.fillStyle = palette.danger;
+    ctx.globalAlpha = flash * 0.2;
+    ctx.fillRect(
+      blocked.cell.x * cellSize,
+      blocked.cell.y * cellSize,
+      cellSize,
+      cellSize,
+    );
+  }
+
+  // 2) 红环扩散：两圈错开的环从碰撞点向外扩散并淡出（红环扩散动画）。
+  for (let ring = 0; ring < 2; ring++) {
+    const start = ring * 0.12;
+    const rt = (t - start) / (1 - start);
+    if (rt < 0 || rt >= 1) {
+      continue;
+    }
+    const radius = cellSize * (0.3 + 1.5 * easeOutCubic(rt));
+    ctx.strokeStyle = palette.danger;
+    ctx.lineWidth = 2.5 * (1 - rt) + 0.5;
+    ctx.globalAlpha = 0.85 * (1 - rt);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // 3) 火花：沿固定方向向外飞溅的小红点，随扩散淡出。
+  const sparkCount = 8;
+  for (let i = 0; i < sparkCount; i++) {
+    const angle = (i / sparkCount) * Math.PI * 2 + 0.4;
+    const dist = cellSize * (0.5 + 1.7 * easeOutCubic(t));
+    const sx = center.x + Math.cos(angle) * dist;
+    const sy = center.y + Math.sin(angle) * dist;
+    const sa = 0.7 * (1 - t);
+    ctx.fillStyle = palette.danger;
+    ctx.globalAlpha = sa;
+    ctx.beginPath();
+    ctx.arc(sx, sy, Math.max(0.5, cellSize * 0.09 * (1 - t)), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 复位透明度，避免影响后续绘制。
+  ctx.globalAlpha = 1;
+}
+
 export function draw(
   ctx: CanvasRenderingContext2D,
   map: MapInfo,
@@ -239,6 +380,8 @@ export function draw(
   cellSize: number,
   visited?: TrailPoint[],
   now = 0,
+  blocked?: BlockedFeedback | null,
+  reduceMotion = false,
 ): void {
   const width = map.width * cellSize;
   const height = map.height * cellSize;
@@ -282,7 +425,7 @@ export function draw(
 
   // 紫色航线（已走轨迹，在机器人之下）。
   if (visited) {
-    drawCourse(ctx, visited, cellSize, now);
+    drawCourse(ctx, visited, cellSize, now, reduceMotion);
   }
 
   // 指北针。
@@ -290,6 +433,11 @@ export function draw(
 
   if (robot) {
     drawRobot(ctx, robot, cellSize);
+  }
+
+  // 碰撞反馈：压在最上层，红环扩散只在受阻反馈窗口内绘制。
+  if (blocked) {
+    drawBlockedFeedback(ctx, blocked, cellSize, now, reduceMotion);
   }
 }
 

@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   DEFAULT_CELL_SIZE,
+  blockedCell,
   draw,
   drawPerceptionLayer,
   setupCanvas,
+  type BlockedFeedback,
 } from "../canvas/renderer";
 import { headingLabel } from "../format";
 import type { UiState } from "../state";
@@ -47,10 +49,41 @@ export function MapPanel({
   const [dprKey, setDprKey] = useState(0);
 
   // 最新绘制状态快照：rAF 循环持续读取，避免每帧重建闭包。
-  const drawStateRef = useRef({ map, robot, visited, discovered });
+  const drawStateRef = useRef<{
+    map: MapInfo | null;
+    robot: RobotState | null;
+    visited: TrailPoint[];
+    discovered: Detection[];
+    blocked: BlockedFeedback | null;
+  }>({ map, robot, visited, discovered, blocked: null });
+
+  // 受阻反馈时间戳：进入 BOUNDARY_FEEDBACK 时记录一次，退出时清空。
+  const blockedAtRef = useRef<number | null>(null);
   useEffect(() => {
-    drawStateRef.current = { map, robot, visited, discovered };
-  }, [map, robot, visited, discovered]);
+    if (ui === "BOUNDARY_FEEDBACK") {
+      if (blockedAtRef.current === null) {
+        blockedAtRef.current = performance.now();
+      }
+    } else {
+      blockedAtRef.current = null;
+    }
+  }, [ui]);
+
+  useEffect(() => {
+    drawStateRef.current = {
+      map,
+      robot,
+      visited,
+      discovered,
+      blocked:
+        ui === "BOUNDARY_FEEDBACK" &&
+        map &&
+        robot &&
+        blockedAtRef.current !== null
+          ? { cell: blockedCell(robot, map), at: blockedAtRef.current }
+          : null,
+    };
+  }, [map, robot, visited, discovered, ui]);
 
   // 跨 DPI 显示器拖动时 devicePixelRatio 会变化；监听分辨率变化触发重采样。
   useEffect(() => {
@@ -60,6 +93,19 @@ export function MapPanel({
       mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
       mql.addEventListener("change", onChange);
       setDprKey((k) => k + 1);
+    };
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  // 减少动态偏好：canvas 动画（红环扩散/轨迹火花）无法被 CSS 媒体查询覆盖，
+  // 需在 JS 层检测 matchMedia 并静态化。rAF 每帧读此 ref，偏好切换即时生效。
+  const reduceMotionRef = useRef(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reduceMotionRef.current = mql.matches;
+    const onChange = (e: MediaQueryListEvent): void => {
+      reduceMotionRef.current = e.matches;
     };
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
@@ -82,7 +128,16 @@ export function MapPanel({
       const ctx = ctxRef.current;
       const s = drawStateRef.current;
       if (ctx && s.map) {
-        draw(ctx, s.map, s.robot, DEFAULT_CELL_SIZE, s.visited, now);
+        draw(
+          ctx,
+          s.map,
+          s.robot,
+          DEFAULT_CELL_SIZE,
+          s.visited,
+          now,
+          s.blocked,
+          reduceMotionRef.current,
+        );
         drawPerceptionLayer(ctx, s.discovered, DEFAULT_CELL_SIZE);
       }
       rafId = requestAnimationFrame(tick);
@@ -110,12 +165,22 @@ export function MapPanel({
       <h2 className="sr-only">地图</h2>
       <div className="flex min-h-0 flex-1 items-center justify-center">
         <div className={`map-frame ${blocked ? "is-blocked" : ""}`}>
-          <canvas
-            ref={canvasRef}
-            role="img"
-            aria-label={mapSummary}
-            className="block h-full w-full"
-          />
+          {map ? (
+            <canvas
+              ref={canvasRef}
+              role="img"
+              aria-label={mapSummary}
+              className="block h-full w-full"
+            />
+          ) : (
+            <div
+              className="map-skeleton"
+              role="img"
+              aria-label={
+                ui === "DISCONNECTED" ? "地图不可用，连接已断开" : "地图加载中"
+              }
+            />
+          )}
         </div>
       </div>
 
