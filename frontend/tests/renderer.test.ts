@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  blockedCell,
   cellCenter,
   DEFAULT_CELL_SIZE,
   draw,
   drawPerceptionLayer,
+  type BlockedFeedback,
 } from "../src/canvas/renderer";
 import type { Detection, MapInfo, RobotState } from "../src/types";
 
@@ -58,6 +60,27 @@ describe("cellCenter", () => {
   });
 });
 
+describe("blockedCell", () => {
+  it("朝向下一格在界内时返回该格", () => {
+    const r: RobotState = { ...robot, position: { x: 3, y: 4 }, heading: "RIGHT" };
+    expect(blockedCell(r, map)).toEqual({ x: 4, y: 4 });
+  });
+
+  it("越界时钳制到边缘格（真实反映碰撞发生在哪一侧）", () => {
+    const up: RobotState = { ...robot, position: { x: 3, y: 0 }, heading: "UP" };
+    expect(blockedCell(up, map)).toEqual({ x: 3, y: 0 });
+
+    const left: RobotState = { ...robot, position: { x: 0, y: 4 }, heading: "LEFT" };
+    expect(blockedCell(left, map)).toEqual({ x: 0, y: 4 });
+
+    const right: RobotState = { ...robot, position: { x: 19, y: 4 }, heading: "RIGHT" };
+    expect(blockedCell(right, map)).toEqual({ x: 19, y: 4 });
+
+    const down: RobotState = { ...robot, position: { x: 3, y: 19 }, heading: "DOWN" };
+    expect(blockedCell(down, map)).toEqual({ x: 3, y: 19 });
+  });
+});
+
 describe("draw", () => {
   it("绘制地图与机器人不抛异常", () => {
     expect(() => draw(mockCtx(), map, robot, 32)).not.toThrow();
@@ -73,6 +96,18 @@ describe("draw", () => {
       obstacles: [{ x: 4, y: 4 }, { x: 5, y: 4 }],
     };
     expect(() => draw(mockCtx(), obstacleMap, robot, 32)).not.toThrow();
+  });
+
+  it("受阻反馈（红环扩散）绘制不抛异常", () => {
+    const blocked: BlockedFeedback = { cell: { x: 4, y: 4 }, at: 0 };
+    expect(() => draw(mockCtx(), map, robot, 32, [], 100, blocked)).not.toThrow();
+  });
+
+  it("减少动态模式下受阻反馈静态化绘制不抛异常", () => {
+    const blocked: BlockedFeedback = { cell: { x: 4, y: 4 }, at: 0 };
+    expect(() =>
+      draw(mockCtx(), map, robot, 32, [], 100, blocked, true),
+    ).not.toThrow();
   });
 });
 

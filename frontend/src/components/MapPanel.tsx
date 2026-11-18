@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   DEFAULT_CELL_SIZE,
+  blockedCell,
   draw,
   drawPerceptionLayer,
   setupCanvas,
+  type BlockedFeedback,
 } from "../canvas/renderer";
 import { headingLabel } from "../format";
 import type { UiState } from "../state";
 import { palette } from "../theme";
-import type { Detection, MapInfo, Position, RobotState } from "../types";
+import type { Detection, MapInfo, RobotState, TrailPoint } from "../types";
 
 interface Props {
   className?: string;
@@ -17,7 +19,7 @@ interface Props {
   robot: RobotState | null;
   ui: UiState;
   discovered: Detection[];
-  visited: Position[];
+  visited: TrailPoint[];
 }
 
 function LegendItem({ swatch, label }: { swatch: ReactNode; label: string }) {
@@ -46,6 +48,43 @@ export function MapPanel({
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const [dprKey, setDprKey] = useState(0);
 
+  // 最新绘制状态快照：rAF 循环持续读取，避免每帧重建闭包。
+  const drawStateRef = useRef<{
+    map: MapInfo | null;
+    robot: RobotState | null;
+    visited: TrailPoint[];
+    discovered: Detection[];
+    blocked: BlockedFeedback | null;
+  }>({ map, robot, visited, discovered, blocked: null });
+
+  // 受阻反馈时间戳：进入 BOUNDARY_FEEDBACK 时记录一次，退出时清空。
+  const blockedAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (ui === "BOUNDARY_FEEDBACK") {
+      if (blockedAtRef.current === null) {
+        blockedAtRef.current = performance.now();
+      }
+    } else {
+      blockedAtRef.current = null;
+    }
+  }, [ui]);
+
+  useEffect(() => {
+    drawStateRef.current = {
+      map,
+      robot,
+      visited,
+      discovered,
+      blocked:
+        ui === "BOUNDARY_FEEDBACK" &&
+        map &&
+        robot &&
+        blockedAtRef.current !== null
+          ? { cell: blockedCell(robot, map), at: blockedAtRef.current }
+          : null,
+    };
+  }, [map, robot, visited, discovered, ui]);
+
   // 跨 DPI 显示器拖动时 devicePixelRatio 会变化；监听分辨率变化触发重采样。
   useEffect(() => {
     let mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
@@ -59,7 +98,20 @@ export function MapPanel({
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  // 地图变化或 DPR 变化时（重新）初始化画布并绘制一次。
+  // 减少动态偏好：canvas 动画（红环扩散/轨迹火花）无法被 CSS 媒体查询覆盖，
+  // 需在 JS 层检测 matchMedia 并静态化。rAF 每帧读此 ref，偏好切换即时生效。
+  const reduceMotionRef = useRef(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reduceMotionRef.current = mql.matches;
+    const onChange = (e: MediaQueryListEvent): void => {
+      reduceMotionRef.current = e.matches;
+    };
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  // 地图变化或 DPR 变化时（重新）初始化画布（不在此绘制，绘制统一由 rAF 循环负责）。
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !map) {
@@ -67,23 +119,32 @@ export function MapPanel({
       return;
     }
     ctxRef.current = setupCanvas(canvas, map, DEFAULT_CELL_SIZE);
-    const ctx = ctxRef.current;
-    if (ctx) {
-      draw(ctx, map, robot, DEFAULT_CELL_SIZE, visited);
-      drawPerceptionLayer(ctx, discovered, DEFAULT_CELL_SIZE);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, dprKey]);
 
-  // 机器人/已发现异常/已走轨迹变化时重绘。
+  // 持续重绘：requestAnimationFrame 驱动粒子动画（彗尾呼吸脉冲），每帧全量重绘。
   useEffect(() => {
-    const ctx = ctxRef.current;
-    if (!ctx || !map) {
-      return;
-    }
-    draw(ctx, map, robot, DEFAULT_CELL_SIZE, visited);
-    drawPerceptionLayer(ctx, discovered, DEFAULT_CELL_SIZE);
-  }, [robot, discovered, map, visited]);
+    let rafId = 0;
+    const tick = (now: number): void => {
+      const ctx = ctxRef.current;
+      const s = drawStateRef.current;
+      if (ctx && s.map) {
+        draw(
+          ctx,
+          s.map,
+          s.robot,
+          DEFAULT_CELL_SIZE,
+          s.visited,
+          now,
+          s.blocked,
+          reduceMotionRef.current,
+        );
+        drawPerceptionLayer(ctx, s.discovered, DEFAULT_CELL_SIZE);
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   const blocked = ui === "BOUNDARY_FEEDBACK";
   const mapSummary = map
@@ -99,22 +160,32 @@ export function MapPanel({
   return (
     <section
       aria-label="地图区"
-      className={`flex h-full min-h-0 min-w-0 flex-col gap-3 ${className ?? ""}`}
+      className={`flex h-full min-h-0 min-w-0 flex-col gap-5 ${className ?? ""}`}
     >
       <h2 className="sr-only">地图</h2>
       <div className="flex min-h-0 flex-1 items-center justify-center">
         <div className={`map-frame ${blocked ? "is-blocked" : ""}`}>
-          <canvas
-            ref={canvasRef}
-            role="img"
-            aria-label={mapSummary}
-            className="block h-full w-full"
-          />
+          {map ? (
+            <canvas
+              ref={canvasRef}
+              role="img"
+              aria-label={mapSummary}
+              className="block h-full w-full"
+            />
+          ) : (
+            <div
+              className="map-skeleton"
+              role="img"
+              aria-label={
+                ui === "DISCONNECTED" ? "地图不可用，连接已断开" : "地图加载中"
+              }
+            />
+          )}
         </div>
       </div>
 
-      {/* 符号图例 + 比例尺 + 地图信息，铺满列宽置于底部。 */}
-      <div className="map-legend flex w-full shrink-0 flex-col gap-2.5">
+      {/* 符号图例 + 比例尺 + 地图信息，与地图同宽居中（不铺满列宽，避免与地图错位）。 */}
+      <div className="map-legend mx-auto flex w-full max-w-[calc(100vh-200px)] shrink-0 flex-col gap-2.5">
         <h3 className="control-label m-0">符号图例</h3>
         <ul
           className="m-0 flex list-none flex-wrap items-center gap-x-6 gap-y-2 pl-0"

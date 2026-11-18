@@ -61,9 +61,9 @@
       "name": "Course Trail",
       "kind": "custom",
       "refersTo": "course-trail",
-      "description": "已走轨迹的紫色折线：连接机器人走过的单元格中心，压在地形之上、机器人之下，像定向越野地图上压在一切之上的课程线。",
+      "description": "已走轨迹的紫色「彗尾」光迹：越靠近机器人越粗越亮、越往尾部越细越淡，头部一颗带柔光的发光点。每个轨迹点带时间戳，超过约 0.8s 自动淡出，机器人停下后也会自然消散。压在地形之上、机器人之下。",
       "html": "<canvas role=\"img\"></canvas>",
-      "css": ".ds-course-trail{stroke:#7c3aed;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}"
+      "css": ".ds-course-trail{stroke:#7c3aed;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;opacity:.3}"
     },
     {
       "name": "Signal Lamp",

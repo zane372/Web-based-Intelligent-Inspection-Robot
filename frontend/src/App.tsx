@@ -6,7 +6,7 @@ import {
   reducePerception,
 } from "./perception_state";
 import { createInitialState, reduce } from "./state";
-import type { Heading, Position } from "./types";
+import type { Heading, TrailPoint } from "./types";
 import { ControlPanel } from "./components/ControlPanel";
 import { MapPanel } from "./components/MapPanel";
 import { PerceptionPanel } from "./components/PerceptionPanel";
@@ -27,7 +27,7 @@ export default function App() {
 
   // 已走轨迹：随机器人位置累积，instanceId 变化（重置/重载）时清零。
   // 供 MapPanel 把「紫色航线」画在地形之上、机器人之下。
-  const [visited, setVisited] = useState<Position[]>([]);
+  const [visited, setVisited] = useState<TrailPoint[]>([]);
   const instanceRef = useRef<string | null>(null);
   useEffect(() => {
     const r = state.robot;
@@ -38,13 +38,18 @@ export default function App() {
     }
     if (instanceRef.current !== r.instanceId) {
       instanceRef.current = r.instanceId;
-      setVisited([r.position]);
+      setVisited([{ x: r.position.x, y: r.position.y, at: performance.now() }]);
       return;
     }
     setVisited((prev) => {
       const last = prev[prev.length - 1];
       if (!last || last.x !== r.position.x || last.y !== r.position.y) {
-        return [...prev, r.position];
+        const next = [
+          ...prev,
+          { x: r.position.x, y: r.position.y, at: performance.now() },
+        ];
+        // 只保留最近 64 点，防止长巡检时数组无限增长。
+        return next.length > 64 ? next.slice(next.length - 64) : next;
       }
       return prev;
     });

@@ -222,6 +222,23 @@ body {
   }
 }
 
+/* 地图加载骨架：暖纸色底 + 呼吸脉冲（Operate 模式的骨架态，替代加载时的空白地图）。 */
+.map-skeleton {
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-field);
+  animation: skeleton-breathe 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
 /* 符号图例：像地图边缘的图例表。 */
 .map-legend {
   background: var(--color-surface);
@@ -314,7 +331,8 @@ button:disabled {
 /* 减少动态偏好：关闭无限脉冲/闪框动画，用静态色保留同一状态语义。 */
 @media (prefers-reduced-motion: reduce) {
   .signal-lamp.is-pulsing,
-  .map-frame.is-blocked {
+  .map-frame.is-blocked,
+  .map-skeleton {
     animation: none;
   }
   .map-frame.is-blocked {
