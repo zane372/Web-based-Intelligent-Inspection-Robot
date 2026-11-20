@@ -59,6 +59,9 @@ RobotSnapshot PatrolExecutor::buildSnapshotLocked(const Robot& robot,
 bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
                                    Robot& robot, const Grid& grid,
                                    int& sequence) {
+    // 捕获本次会话代际：重规划期间若并发 Stop/Start 使 generation_ 递增，
+    // 本线程即已陈旧，必须放弃推进（FND-004：Stop→Start ABA 竞态）。
+    const std::uint64_t generation = generation_;
     if (!active_) {
         stepSnapshot_ = buildSnapshotLocked(robot, sequence);
         return false;
@@ -92,8 +95,8 @@ bool PatrolExecutor::stepReplanned(std::unique_lock<std::mutex>& lock,
         lock.unlock();
         std::vector<Direction> path = planPatrolPath(grid, from);
         lock.lock();
-        if (!active_) {
-            return false;  // 重规划期间巡检被停止。
+        if (!active_ || generation_ != generation) {
+            return false;  // 重规划期间巡检被停止，或代际更替（并发 Stop/Start）。
         }
         if (!(robot.position() == from)) {
             // 位置被并发移动（罕见）：就地重规划。
@@ -147,8 +150,12 @@ void PatrolExecutor::loop(std::mutex& mutex, Robot& robot, const Grid& grid,
         const bool keepGoing = stepReplanned(lock, robot, grid, sequence);
         // stepReplanned 已在锁内捕获已确认快照；于锁外通知（AR-CON-006/007）。
         const RobotSnapshot snap = stepSnapshot_;
+        // 代际失配（并发 Stop/Start）时本线程已陈旧：不得通知陈旧快照，
+        // 否则感知服务会收到重复的接触事件（FND-019 的根因）。取舍：会话取消
+        // 期间（重规划中被打断）的瞬时受阻接触事件会被丢弃，宁缺毋滥。
+        const bool stale = generation_ != generation;
         lock.unlock();
-        if (onStep_) {
+        if (onStep_ && !stale) {
             onStep_(snap);
         }
         if (!keepGoing) {

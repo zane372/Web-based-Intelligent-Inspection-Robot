@@ -18,7 +18,7 @@ public:
     // 判断坐标是否在 [0, width) x [0, height) 范围内。
     bool contains(Position position) const;
 
-    // 判断坐标是否为障碍物（仅对界内坐标有意义）。
+    // 判断坐标是否为障碍物（界外坐标返回 false）。
     bool isObstacle(Position position) const;
 
     // 可通行 = 在界内且非障碍物。

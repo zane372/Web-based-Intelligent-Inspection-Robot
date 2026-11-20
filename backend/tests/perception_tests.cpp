@@ -431,5 +431,30 @@ TEST(PerceptionService, ResetRandomizesMultipleHazardsDistinct) {
     }
 }
 
+TEST(PerceptionService, OutOfOrderResetStillRandomizesHazards) {
+    // FND-020 回归：乱序到达的 RESET（低序列后到）仍须重新随机化异常源位置，
+    // 不得被静默丢弃。初始把异常源放在障碍格（绕过配置校验直接构造），
+    // 乱序 RESET 后必须离开障碍格，证明重随机化确实执行。
+    Grid grid(5, 5, {Position{2, 2}});
+    auto config = makeConfig(3, 2, {makeHazard("h1", Position{2, 2})});
+    PerceptionService svc(config, "inst-1", grid, /*rngSeed=*/12345u);
+
+    // 高序列先到：建立 lastObservedSequence_ = 2。
+    svc.observe("inst-1", 2, Position{0, 0}, Direction::Right,
+                LastResult::Moved);
+    ASSERT_EQ(svc.hazardPositions().size(), 1u);
+    EXPECT_EQ(svc.hazardPositions()[0], Position(2, 2));  // 尚未随机化
+
+    // 低序列 RESET 后到（乱序）：仍须触发重随机化。
+    svc.observe("inst-1", 1, Position{0, 0}, Direction::Right,
+                LastResult::Reset);
+
+    const auto positions = svc.hazardPositions();
+    ASSERT_EQ(positions.size(), 1u);
+    EXPECT_TRUE(grid.isWalkable(positions[0]));
+    EXPECT_FALSE(grid.isObstacle(positions[0]));
+    EXPECT_NE(positions[0], Position(2, 2));  // 已离开障碍格 → 重随机化确实执行
+}
+
 }  // namespace
 }  // namespace patrol

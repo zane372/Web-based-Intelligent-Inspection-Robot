@@ -43,6 +43,13 @@ void PerceptionService::observe(const std::string& instanceId, int sequence,
     // 乱序到达时仍须补记，否则并发命令会「偷跑」更高序列而丢巡检步的接触事件。
     if (sequence < lastObservedSequence_) {
         appendContactEventLocked(instanceId, sequence, position, lastResult);
+        // RESET 的异常源重随机化是命令副作用（SPEC 6.4 扩展），乱序到达时仍须
+        // 应用，否则被静默丢弃（FND-020）。重随机化只改 config_.hazards 位置、
+        // 不更新 latest_/activeDetections_；事件 diff 按 hazardId 进行且 RESET
+        // 保持 id 不变，故不会产生虚假的进出事件。
+        if (lastResult == LastResult::Reset) {
+            randomizeHazardsLocked();
+        }
         return;
     }
     lastObservedSequence_ = sequence;

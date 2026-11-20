@@ -210,5 +210,46 @@ TEST(PerceptionConfig, RejectsUnicodeLabelOver80Codepoints) {
     std::remove(path.c_str());
 }
 
+// ---- loadMapConfig 回归（FND-012 窄化截断） ----
+
+TEST(MapConfig, ValidConfigLoads) {
+    const std::string path = writeTempJson(
+        "valid_map",
+        R"({"mapId":"grid-10x10","width":10,"height":10,
+            "initialRobot":{"x":0,"y":0,"heading":"RIGHT"},
+            "obstacles":[{"x":4,"y":4}]})");
+    const auto cfg = loadMapConfig(path);
+    EXPECT_EQ(cfg.mapId, "grid-10x10");
+    EXPECT_EQ(cfg.width, 10);
+    EXPECT_EQ(cfg.height, 10);
+    EXPECT_EQ(cfg.initialPosition.x, 0);
+    EXPECT_EQ(cfg.initialPosition.y, 0);
+    EXPECT_EQ(cfg.initialHeading, Direction::Right);
+    ASSERT_EQ(cfg.obstacles.size(), 1u);
+    EXPECT_EQ(cfg.obstacles[0].x, 4);
+    EXPECT_EQ(cfg.obstacles[0].y, 4);
+    std::remove(path.c_str());
+}
+
+TEST(MapConfig, RejectsWidthNarrowingTruncation) {
+    // FND-012 回归：4294967301 直接 get<int>() 会窄化为 5，绕过 [1,100] 校验。
+    const std::string path = writeTempJson(
+        "narrow_width",
+        R"({"mapId":"m","width":4294967301,"height":10,
+            "initialRobot":{"x":0,"y":0,"heading":"RIGHT"}})");
+    EXPECT_THROW(loadMapConfig(path), std::runtime_error);
+    std::remove(path.c_str());
+}
+
+TEST(PerceptionConfig, RejectsRangeCellsNarrowingTruncation) {
+    // FND-012 回归：rangeCells 的超大值（截断为 5）同样不得窄化绕过 [1,20] 校验。
+    const std::string path = writeTempJson(
+        "narrow_range",
+        R"({"version":1,"enabled":true,"rangeCells":4294967301,"hazardRangeCells":2,
+            "hazards":[]})");
+    EXPECT_THROW(loadPerceptionConfig(path, makeMap()), std::runtime_error);
+    std::remove(path.c_str());
+}
+
 }  // namespace
 }  // namespace patrol
