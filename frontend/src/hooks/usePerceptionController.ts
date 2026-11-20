@@ -130,6 +130,5 @@ export function usePerceptionController(
     if (state.ui !== "LOADING" && state.ui !== "DISABLED") {
       void pollPerceptionOnce();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 }

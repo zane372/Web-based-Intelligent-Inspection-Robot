@@ -182,7 +182,6 @@ export function useRobotController(
       void pollOnce();
     }
     // 仅在「从隐藏变为可见」的瞬间补拉，避免依赖其它状态反复触发。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   // 卸载清理。
