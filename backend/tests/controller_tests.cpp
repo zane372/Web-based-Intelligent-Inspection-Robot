@@ -1,6 +1,9 @@
 // Controller 单元测试：序列号单调递增、快照一致性、Reset 序列号语义。
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <mutex>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -203,6 +206,35 @@ TEST(RobotControllerTest, StopPatrolWhenInactiveIsIdempotent) {
     EXPECT_EQ(outcome.result, CommandResult::PatrolStopped);
     EXPECT_FALSE(outcome.robot.patrolActive);
     EXPECT_EQ(outcome.robot.sequence, 0);
+}
+
+// FND-004/008 回归：Stop→Start 代际更替后，陈旧线程不得重复通知同一序列
+// （否则感知服务会产生重复接触事件——FND-019 根因）。小间隔 + 多轮循环
+// 最大化触发竞态的概率；用集合查重而非排序，因观察回调在锁外、到达顺序本无序。
+TEST(RobotControllerTest, StopStartDoesNotDuplicateNotifications) {
+    Grid grid(20, 20);
+    Robot robot(Position{0, 0}, Direction::Right);
+    RobotController controller(grid, robot, "robot-1", "inst-patrol", 1);
+
+    std::mutex obsMutex;
+    std::vector<int> observed;
+    controller.setObserver([&](const RobotSnapshot& s) {
+        std::lock_guard<std::mutex> lk(obsMutex);
+        observed.push_back(s.sequence);
+    });
+
+    for (int i = 0; i < 10; ++i) {
+        controller.execute(CommandType::StartPatrol, Direction::Right);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        controller.execute(CommandType::StopPatrol, Direction::Right);
+    }
+    // 给任何可能的陈旧线程留出退出时间。
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+
+    std::lock_guard<std::mutex> lk(obsMutex);
+    const std::set<int> unique(observed.begin(), observed.end());
+    EXPECT_EQ(unique.size(), observed.size())
+        << "检测到重复观察序列号，疑似陈旧线程重复通知";
 }
 
 }  // namespace

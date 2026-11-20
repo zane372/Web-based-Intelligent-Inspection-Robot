@@ -17,6 +17,11 @@ bool Grid::contains(Position position) const {
 }
 
 bool Grid::isObstacle(Position position) const {
+    // 界外坐标一律返回 false（不是障碍），避免越界坐标索引别名（如宽 10 时
+    // {10, 0} 与 {0, 1} 键同为 10）被误判为障碍（FND-018）。
+    if (!contains(position)) {
+        return false;
+    }
     return obstacles_.count(position.y * width_ + position.x) > 0;
 }
 

@@ -1,6 +1,7 @@
 #include "config.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <fstream>
 #include <set>
 #include <sstream>
@@ -11,6 +12,39 @@
 #include "dto.hpp"
 
 namespace patrol {
+
+namespace {
+
+// 从 JSON 读取一个必须落在 [min, max] 内的整数，避免 nlohmann::json::get<int>()
+// 对超出 int 表示范围的值做 static_cast 窄化截断（如 4294967301 → 5），从而
+// 绕过后续 [min, max] 校验（FND-012）。is_number_integer() 对 int64 与 uint64
+// 两种存储类型都为真；先按存储类型无损读取，再统一判范围。min/max 均非负，
+// 本助手仅用于非负字段。
+int parseBoundedInt(const nlohmann::json& v, long long min, long long max,
+                    const std::string& fieldName) {
+    if (!v.is_number_integer()) {
+        throw std::runtime_error(fieldName + " 必须是整数");
+    }
+    if (v.is_number_unsigned()) {
+        const std::uint64_t u = v.get<std::uint64_t>();
+        if (u < static_cast<std::uint64_t>(min) ||
+            u > static_cast<std::uint64_t>(max)) {
+            throw std::runtime_error(fieldName + " 必须在 [" +
+                                     std::to_string(min) + ", " +
+                                     std::to_string(max) + "] 范围内");
+        }
+        return static_cast<int>(u);
+    }
+    const std::int64_t s = v.get<std::int64_t>();
+    if (s < min || s > max) {
+        throw std::runtime_error(fieldName + " 必须在 [" +
+                                 std::to_string(min) + ", " +
+                                 std::to_string(max) + "] 范围内");
+    }
+    return static_cast<int>(s);
+}
+
+}  // namespace
 
 MapConfig loadMapConfig(const std::string& path) {
     std::ifstream in(path);
@@ -41,14 +75,8 @@ MapConfig loadMapConfig(const std::string& path) {
         throw std::runtime_error("配置缺少合法的 height（整数）");
     }
 
-    const int width = root["width"].get<int>();
-    const int height = root["height"].get<int>();
-    if (width < 1 || width > 100) {
-        throw std::runtime_error("width 必须在 [1, 100] 范围内");
-    }
-    if (height < 1 || height > 100) {
-        throw std::runtime_error("height 必须在 [1, 100] 范围内");
-    }
+    const int width = parseBoundedInt(root["width"], 1, 100, "width");
+    const int height = parseBoundedInt(root["height"], 1, 100, "height");
 
     if (!root.contains("initialRobot") || !root["initialRobot"].is_object()) {
         throw std::runtime_error("配置缺少 initialRobot 对象");
@@ -64,15 +92,13 @@ MapConfig loadMapConfig(const std::string& path) {
         throw std::runtime_error("initialRobot.heading 必须是字符串");
     }
 
-    const Position initialPosition{ir["x"].get<int>(), ir["y"].get<int>()};
+    const Position initialPosition{
+        parseBoundedInt(ir["x"], 0, width - 1, "initialRobot.x"),
+        parseBoundedInt(ir["y"], 0, height - 1, "initialRobot.y")};
     Direction initialHeading{};
     if (!directionFromString(ir["heading"].get<std::string>(), initialHeading)) {
         throw std::runtime_error("initialRobot.heading 非法: " +
                                  ir["heading"].get<std::string>());
-    }
-    if (initialPosition.x < 0 || initialPosition.x >= width ||
-        initialPosition.y < 0 || initialPosition.y >= height) {
-        throw std::runtime_error("initialRobot 初始位置越界");
     }
 
     // 可选 obstacles 数组：每个元素 {x, y}，须在界内且不与初始位置重合、彼此不重复。
@@ -87,10 +113,9 @@ MapConfig loadMapConfig(const std::string& path) {
                 !o.contains("y") || !o["y"].is_number_integer()) {
                 throw std::runtime_error("obstacles 元素必须是 {x, y} 整数对象");
             }
-            const Position pos{o["x"].get<int>(), o["y"].get<int>()};
-            if (pos.x < 0 || pos.x >= width || pos.y < 0 || pos.y >= height) {
-                throw std::runtime_error("obstacles 元素越界");
-            }
+            const Position pos{
+                parseBoundedInt(o["x"], 0, width - 1, "obstacles.x"),
+                parseBoundedInt(o["y"], 0, height - 1, "obstacles.y")};
             if (pos == initialPosition) {
                 throw std::runtime_error("obstacles 不能与初始位置重合");
             }
@@ -217,10 +242,11 @@ PerceptionConfig loadPerceptionConfig(const std::string& path,
         throw std::runtime_error("感知配置含未知字段");
     }
 
-    if (!root.contains("version") || !root["version"].is_number_integer() ||
-        root["version"].get<int>() != 1) {
+    if (!root.contains("version")) {
         throw std::runtime_error("感知配置 version 必须是整数 1");
     }
+    // parseBoundedInt 校验整数类型与 [1, 1] 范围，失败抛 std::runtime_error。
+    parseBoundedInt(root["version"], 1, 1, "version");
     if (!root.contains("enabled") || !root["enabled"].is_boolean()) {
         throw std::runtime_error("感知配置 enabled 必须是布尔值");
     }
@@ -233,14 +259,9 @@ PerceptionConfig loadPerceptionConfig(const std::string& path,
         throw std::runtime_error("感知配置 hazardRangeCells 必须是整数");
     }
 
-    const int rangeCells = root["rangeCells"].get<int>();
-    const int hazardRangeCells = root["hazardRangeCells"].get<int>();
-    if (rangeCells < 1 || rangeCells > 20) {
-        throw std::runtime_error("rangeCells 必须在 [1, 20] 范围内");
-    }
-    if (hazardRangeCells < 0 || hazardRangeCells > 20) {
-        throw std::runtime_error("hazardRangeCells 必须在 [0, 20] 范围内");
-    }
+    const int rangeCells = parseBoundedInt(root["rangeCells"], 1, 20, "rangeCells");
+    const int hazardRangeCells =
+        parseBoundedInt(root["hazardRangeCells"], 0, 20, "hazardRangeCells");
 
     if (!root.contains("hazards") || !root["hazards"].is_array()) {
         throw std::runtime_error("感知配置缺少 hazards 数组");
@@ -291,11 +312,9 @@ PerceptionConfig loadPerceptionConfig(const std::string& path,
             !pos.contains("y") || !pos["y"].is_number_integer()) {
             throw std::runtime_error("hazards 元素 position 必须是 {x, y} 整数");
         }
-        const Position hazardPos{pos["x"].get<int>(), pos["y"].get<int>()};
-        if (hazardPos.x < 0 || hazardPos.x >= map.width || hazardPos.y < 0 ||
-            hazardPos.y >= map.height) {
-            throw std::runtime_error("hazards 元素 position 越界");
-        }
+        const Position hazardPos{
+            parseBoundedInt(pos["x"], 0, map.width - 1, "hazards.position.x"),
+            parseBoundedInt(pos["y"], 0, map.height - 1, "hazards.position.y")};
         if (isObstacle(hazardPos)) {
             throw std::runtime_error("hazards 元素 position 不可位于障碍格");
         }
